@@ -2,7 +2,7 @@
 
 A native Xojo plugin that adds **FirebirdSQL** database support to Xojo, integrating with the built-in `Database` class hierarchy (RowSet, PreparedStatement, etc.) just like the MySQL and PostgreSQL plugins that ship with Xojo.
 
-Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xojo Plugin SDK**.
+Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xojo Plugin SDK**. Compatible with Firebird 5.x and 6.x.
 
 ## Features
 

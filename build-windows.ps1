@@ -33,7 +33,7 @@ param(
 
     [string]$BuildType = "Release",
 
-    [string]$FirebirdVersion = "6.0.0"
+    [string]$FirebirdVersion = "5.0.2"
 )
 
 $ErrorActionPreference = "Stop"
