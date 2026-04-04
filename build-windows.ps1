@@ -110,24 +110,24 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
     } else {
         New-Item -ItemType Directory -Path $DepsDir -Force | Out-Null
 
-        # Firebird does not yet distribute native ARM64 Windows builds
-        # ARM64 builds: use x64 (runs under Windows ARM64 x64 emulation)
-        if ($Arch -eq "arm64") {
-            Write-Host "  Note: No native ARM64 Firebird client available." -ForegroundColor DarkYellow
-            Write-Host "  Downloading x64 client (works via emulation on ARM64 Windows)." -ForegroundColor DarkYellow
-        }
-
-        $fbZip = "Firebird-${FirebirdVersion}-windows-x64.zip"
-        $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${FirebirdVersion}/$fbZip"
         $dlPath = Join-Path $DepsDir "firebird.zip"
+
+        if ($Arch -eq "x64") {
+            # Use Firebird 6.0 snapshot for x64
+            $fbUrl = "https://github.com/FirebirdSQL/snapshots/releases/download/snapshot-master/Firebird-6.0.0.1880-0-6ff1f92-windows-x64.zip"
+        } elseif ($Arch -eq "arm64") {
+            # Use Firebird 6.0 snapshot for ARM64
+            $fbUrl = "https://github.com/FirebirdSQL/snapshots/releases/download/snapshot-master/Firebird-6.0.0.1880-0-6ff1f92-windows-arm64.zip"
+        }
 
         Write-Host "  Downloading: $fbUrl"
         try {
             Invoke-WebRequest -Uri $fbUrl -OutFile $dlPath -UseBasicParsing
         } catch {
-            Write-Host "  Primary URL failed, trying alternative..." -ForegroundColor DarkYellow
-            $fbZip = "Firebird-${FirebirdVersion}.0-0-windows-x64.zip"
-            $fbUrl = "https://firebirdsql.org/en/server-packages/$fbZip"
+            # Fallback to stable 5.0.2 release
+            Write-Host "  Snapshot URL failed, falling back to Firebird $FirebirdVersion stable..." -ForegroundColor DarkYellow
+            $fbZip = "Firebird-${FirebirdVersion}-windows-x64.zip"
+            $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${FirebirdVersion}/$fbZip"
             Invoke-WebRequest -Uri $fbUrl -OutFile $dlPath -UseBasicParsing
         }
 
