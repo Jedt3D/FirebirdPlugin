@@ -1,0 +1,189 @@
+name: Build FirebirdPlugin
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PLUGIN_NAME: FirebirdPlugin
+  FB_VERSION: "5.0.2"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # macOS — arm64 + x86_64
+  # -------------------------------------------------------------------------
+  build-macos:
+    runs-on: macos-14  # Apple Silicon runner
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Firebird client
+        run: |
+          # Download Firebird macOS installer
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            FB_PKG="Firebird-${{ env.FB_VERSION }}-macos-arm64.pkg"
+          else
+            FB_PKG="Firebird-${{ env.FB_VERSION }}-macos-x64.pkg"
+          fi
+          curl -L -o firebird.pkg \
+            "https://github.com/FirebirdSQL/firebird/releases/download/v${{ env.FB_VERSION }}/${FB_PKG}" \
+            || curl -L -o firebird.pkg \
+            "https://firebirdsql.org/en/server-packages/Firebird-${{ env.FB_VERSION }}-0-macos-${{ matrix.arch }}.pkg"
+          sudo installer -pkg firebird.pkg -target / || true
+          # Verify
+          ls /Library/Frameworks/Firebird.framework/Versions/A/Headers/ibase.h
+          ls /Library/Frameworks/Firebird.framework/Versions/A/Libraries/libfbclient.dylib
+
+      - name: Build
+        run: |
+          cmake -B build \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: build/plugin/
+
+  # -------------------------------------------------------------------------
+  # Windows — x64
+  # -------------------------------------------------------------------------
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Firebird client
+        shell: pwsh
+        run: |
+          # Download Firebird Windows zip (client only)
+          $fbZip = "Firebird-${{ env.FB_VERSION }}-windows-x64.zip"
+          $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${{ env.FB_VERSION }}/$fbZip"
+          Invoke-WebRequest -Uri $fbUrl -OutFile firebird.zip -ErrorAction SilentlyContinue
+          if (-not (Test-Path firebird.zip)) {
+            # Fallback: full installer zip
+            $fbZip = "Firebird-${{ env.FB_VERSION }}.0-0-windows-x64.zip"
+            $fbUrl = "https://firebirdsql.org/en/server-packages/$fbZip"
+            Invoke-WebRequest -Uri $fbUrl -OutFile firebird.zip
+          }
+          Expand-Archive -Path firebird.zip -DestinationPath C:\Firebird -Force
+          # Find the actual directory (may be nested)
+          $fbDir = Get-ChildItem C:\Firebird -Directory | Select-Object -First 1
+          if ($fbDir) {
+            $fbRoot = $fbDir.FullName
+          } else {
+            $fbRoot = "C:\Firebird"
+          }
+          echo "FIREBIRD_ROOT=$fbRoot" >> $env:GITHUB_ENV
+          # Verify headers exist
+          Get-ChildItem "$fbRoot\include" -ErrorAction SilentlyContinue
+          Get-ChildItem "$fbRoot\lib" -ErrorAction SilentlyContinue
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake -B build -A x64 `
+            -DFIREBIRD_ROOT="$env:FIREBIRD_ROOT" `
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: build/plugin/
+
+  # -------------------------------------------------------------------------
+  # Linux — x86_64
+  # -------------------------------------------------------------------------
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Firebird client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y firebird-dev libfbclient2 || true
+          # If package not available, download from Firebird
+          if [ ! -f /usr/include/ibase.h ] && [ ! -f /usr/include/firebird/ibase.h ]; then
+            curl -L -o firebird.tar.gz \
+              "https://github.com/FirebirdSQL/firebird/releases/download/v${{ env.FB_VERSION }}/Firebird-${{ env.FB_VERSION }}-linux-x64.tar.gz"
+            tar xzf firebird.tar.gz
+            FB_DIR=$(find . -maxdepth 1 -name "Firebird*" -type d | head -1)
+            sudo cp -r "$FB_DIR/include/"* /usr/include/
+            sudo cp -r "$FB_DIR/lib/"* /usr/lib/
+          fi
+
+      - name: Build
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFIREBIRD_ROOT=/usr
+          cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: build/plugin/
+
+  # -------------------------------------------------------------------------
+  # Package — combine all platforms into one .xojo_plugin
+  # -------------------------------------------------------------------------
+  package:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Assemble plugin
+        run: |
+          STAGING="staging"
+          mkdir -p "$STAGING"
+
+          # Merge all platform builds into one directory
+          for dir in artifacts/*/; do
+            cp -r "${dir}"* "$STAGING/"
+          done
+
+          # Create Version.info
+          touch "$STAGING/Version.info"
+
+          # Show final structure
+          echo "=== Plugin contents ==="
+          find "$STAGING" -type f | sort
+
+          # Create ZIP
+          cd "$STAGING"
+          zip -r "../${{ env.PLUGIN_NAME }}.xojo_plugin" .
+          cd ..
+          ls -lh "${{ env.PLUGIN_NAME }}.xojo_plugin"
+
+      - name: Upload final plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PLUGIN_NAME }}
+          path: ${{ env.PLUGIN_NAME }}.xojo_plugin
+
+      # Create GitHub Release when a tag is pushed
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PLUGIN_NAME }}.xojo_plugin
+          generate_release_notes: true

@@ -1,0 +1,11 @@
+build/
+build_*/
+*.o
+*.dylib
+*.dll
+*.so
+exports.txt
+.DS_Store
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
