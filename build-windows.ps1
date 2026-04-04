@@ -67,13 +67,7 @@ if (-not $vsPath) {
     exit 1
 }
 
-# Auto-detect VS version for CMake generator (e.g. "Visual Studio 17 2022", "Visual Studio 18 2026")
-$vsVersionFull = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion 2>$null
-$vsMajor = $vsVersionFull.Split('.')[0]
-$vsYear = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property catalog_productLineVersion 2>$null
-$cmakeGenerator = "Visual Studio $vsMajor $vsYear"
 Write-Host "  Found: $vsPath" -ForegroundColor Green
-Write-Host "  Generator: $cmakeGenerator" -ForegroundColor Green
 
 # Check ARM64 tools if needed
 if ($Arch -eq "arm64") {
@@ -200,11 +194,20 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
 # ---------------------------------------------------------------------------
 # Step 3: Clean (if requested)
 # ---------------------------------------------------------------------------
+# Clean stale CMake cache if it exists (avoids generator mismatch errors)
+$cmakeCache = Join-Path $BuildDir "CMakeCache.txt"
 if ($Clean -and (Test-Path $BuildDir)) {
     Write-Host ""
     Write-Host "[3/5] Cleaning build directory..." -ForegroundColor Yellow
     Remove-Item $BuildDir -Recurse -Force
     Write-Host "  Removed: $BuildDir" -ForegroundColor Green
+} elseif (Test-Path $cmakeCache) {
+    # Check if the cached generator matches; if not, wipe and reconfigure
+    $cachedGen = Select-String -Path $cmakeCache -Pattern "^CMAKE_GENERATOR:" -ErrorAction SilentlyContinue
+    if ($cachedGen) {
+        Write-Host ""
+        Write-Host "[3/5] Existing build cache found (will reconfigure if needed)" -ForegroundColor DarkGray
+    }
 } else {
     Write-Host ""
     Write-Host "[3/5] Clean: skipped" -ForegroundColor DarkGray
@@ -222,10 +225,10 @@ $cmakeArch = switch ($Arch) {
     "arm64" { "ARM64" }
 }
 
+# Let CMake auto-detect the VS generator (avoids hardcoding version names)
 $cmakeArgs = @(
     "-B", $BuildDir,
     "-S", $ProjectRoot,
-    "-G", $cmakeGenerator,
     "-A", $cmakeArch,
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DFIREBIRD_ROOT=$FirebirdRoot"
