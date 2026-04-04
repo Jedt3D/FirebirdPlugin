@@ -2,7 +2,7 @@
 // FirebirdPlugin — Xojo API 2.0 Examples
 // ============================================================================
 // Copy these code snippets into a Xojo Console or Desktop project.
-// Requires: FirebirdPlugin installed + Firebird 5.0 server or embedded.
+// Requires: FirebirdPlugin installed + Firebird server or embedded.
 //
 // In Xojo API 2.0:
 //   - Database.Connect raises DatabaseException on failure

@@ -1,5 +1,5 @@
 # FirebirdPlugin for Xojo — macOS Build
-# Requires: Xcode CLI tools, Firebird 5.0 installed at /Library/Frameworks/Firebird.framework
+# Requires: Xcode CLI tools, Firebird 6.0 installed at /Library/Frameworks/Firebird.framework
 
 PLUGIN_NAME = FirebirdPlugin
 SDK_DIR = sdk

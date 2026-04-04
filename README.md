@@ -92,9 +92,9 @@ The plugin links dynamically against **libfbclient** at runtime. You need the Fi
 
 | Platform | Install | What gets installed |
 |----------|---------|-------------------|
-| **macOS** | [Download .pkg](https://firebirdsql.org/en/firebird-5-0/) or `brew install firebird` | `/Library/Frameworks/Firebird.framework/` (headers + `libfbclient.dylib`) |
-| **Windows** | [Download installer](https://firebirdsql.org/en/firebird-5-0/) — choose "Client only" if you don't need the server | `fbclient.dll` + headers in install directory |
-| **Linux** | `sudo apt-get install firebird-dev libfbclient2` (Debian/Ubuntu) or download from [firebirdsql.org](https://firebirdsql.org/en/firebird-5-0/) | `/usr/include/firebird/ibase.h` + `/usr/lib/libfbclient.so` |
+| **macOS** | [Download .pkg](https://firebirdsql.org/en/firebird-6-0/) or `brew install firebird` | `/Library/Frameworks/Firebird.framework/` (headers + `libfbclient.dylib`) |
+| **Windows** | [Download installer](https://firebirdsql.org/en/firebird-6-0/) — choose "Client only" if you don't need the server | `fbclient.dll` + headers in install directory |
+| **Linux** | `sudo apt-get install firebird-dev libfbclient2` (Debian/Ubuntu) or download from [firebirdsql.org](https://firebirdsql.org/en/firebird-6-0/) | `/usr/include/firebird/ibase.h` + `/usr/lib/libfbclient.so` |
 
 > **End-user machines** only need the client library (`libfbclient.dylib` / `fbclient.dll` / `libfbclient.so`), not the full Firebird server — unless they also run a local Firebird database.
 
@@ -126,7 +126,7 @@ The easiest way to build on Windows. The script auto-detects VS2022, downloads F
 .\build-windows.ps1 -Clean
 
 # Use an existing Firebird installation
-.\build-windows.ps1 -FirebirdRoot "C:\Program Files\Firebird\Firebird_5_0"
+.\build-windows.ps1 -FirebirdRoot "C:\Program Files\Firebird\Firebird_6_0"
 
 # Skip download (reuse previous)
 .\build-windows.ps1 -SkipFirebird

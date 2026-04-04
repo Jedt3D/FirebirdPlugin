@@ -33,7 +33,7 @@ param(
 
     [string]$BuildType = "Release",
 
-    [string]$FirebirdVersion = "5.0.2"
+    [string]$FirebirdVersion = "6.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,7 +110,7 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
     } else {
         New-Item -ItemType Directory -Path $DepsDir -Force | Out-Null
 
-        # Firebird only distributes x64 Windows builds as of 5.0
+        # Firebird does not yet distribute native ARM64 Windows builds
         # ARM64 builds: use x64 (runs under Windows ARM64 x64 emulation)
         if ($Arch -eq "arm64") {
             Write-Host "  Note: No native ARM64 Firebird client available." -ForegroundColor DarkYellow
@@ -164,6 +164,7 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
 } elseif ($SkipFirebird -and -not $FirebirdRoot) {
     # Try auto-detect
     $searchPaths = @(
+        "C:\Program Files\Firebird\Firebird_6_0",
         "C:\Program Files\Firebird\Firebird_5_0",
         "C:\Program Files\Firebird\Firebird_4_0",
         "C:\Firebird",

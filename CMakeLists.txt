@@ -23,6 +23,7 @@ elseif(WIN32)
     if(NOT DEFINED FIREBIRD_ROOT)
         # Try common install locations
         foreach(_fb_path
+            "C:/Program Files/Firebird/Firebird_6_0"
             "C:/Program Files/Firebird/Firebird_5_0"
             "C:/Program Files/Firebird/Firebird_4_0"
             "C:/Firebird"

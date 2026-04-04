@@ -1,4 +1,4 @@
-// FirebirdDB.h — Thin C++ wrapper over libfbclient (Firebird 5.0 legacy C API)
+// FirebirdDB.h — Thin C++ wrapper over libfbclient (Firebird legacy C API)
 // This layer handles all direct Firebird interaction so the Xojo plugin
 // bridge never touches isc_* functions directly.
 

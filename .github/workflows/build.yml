@@ -10,7 +10,7 @@ on:
 
 env:
   PLUGIN_NAME: FirebirdPlugin
-  FB_VERSION: "5.0.2"
+  FB_VERSION: "6.0.0"
 
 jobs:
   # -------------------------------------------------------------------------
