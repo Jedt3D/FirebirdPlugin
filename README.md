@@ -72,6 +72,7 @@ FirebirdPlugin/
 │   └── build.yml              # GitHub Actions CI for all platforms
 ├── CMakeLists.txt             # Cross-platform build (macOS/Windows/Linux)
 ├── Makefile                   # macOS-only convenience build
+├── build-windows.ps1          # Windows build script (auto-downloads Firebird)
 └── README.md
 ```
 
@@ -105,10 +106,33 @@ The `sdk/` directory includes the required Plugin SDK headers and glue code from
 
 - **CMake** 3.20+ (cross-platform builds)
 - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-- **Windows**: Visual Studio 2022 with C++ workload
+- **Windows**: Visual Studio 2022 with C++ workload (for ARM64: add "MSVC v143 ARM64 build tools" in VS Installer)
 - **Linux**: GCC/G++ and standard build tools (`build-essential`)
 
 ## Building
+
+### Windows (PowerShell build script)
+
+The easiest way to build on Windows. The script auto-detects VS2022, downloads Firebird, and runs CMake:
+
+```powershell
+# Build for x64 (default) — downloads Firebird automatically
+.\build-windows.ps1
+
+# Build for ARM64
+.\build-windows.ps1 -Arch arm64
+
+# Clean rebuild
+.\build-windows.ps1 -Clean
+
+# Use an existing Firebird installation
+.\build-windows.ps1 -FirebirdRoot "C:\Program Files\Firebird\Firebird_5_0"
+
+# Skip download (reuse previous)
+.\build-windows.ps1 -SkipFirebird
+```
+
+> **ARM64 note**: Firebird does not yet ship native ARM64 Windows builds. The script downloads the x64 client, which works under Windows ARM64's x64 emulation layer. The plugin DLL itself will be native ARM64.
 
 ### macOS (Makefile — quick local build)
 
@@ -119,7 +143,7 @@ make plugin     # packages as FirebirdPlugin.xojo_plugin (ZIP)
 make install    # copies to Xojo Plugins folder
 ```
 
-### Cross-platform (CMake)
+### Cross-platform (CMake — manual)
 
 ```bash
 # macOS (arm64)
@@ -130,8 +154,12 @@ cmake --build build --config Release
 cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
-# Windows (from Developer Command Prompt)
-cmake -B build -A x64 -DFIREBIRD_ROOT="C:\Program Files\Firebird\Firebird_5_0" -DCMAKE_BUILD_TYPE=Release
+# Windows x64 (from Developer Command Prompt or PowerShell)
+cmake -B build -G "Visual Studio 17 2022" -A x64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+
+# Windows ARM64
+cmake -B build -G "Visual Studio 17 2022" -A ARM64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
 # Linux
