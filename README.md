@@ -106,7 +106,7 @@ The `sdk/` directory includes the required Plugin SDK headers and glue code from
 
 - **CMake** 3.20+ (cross-platform builds)
 - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-- **Windows**: Visual Studio 2022 with C++ workload (for ARM64: add "MSVC v143 ARM64 build tools" in VS Installer)
+- **Windows**: Visual Studio 2022 or later with C++ workload (for ARM64: add "MSVC ARM64 build tools" in VS Installer)
 - **Linux**: GCC/G++ and standard build tools (`build-essential`)
 
 ## Building
@@ -155,11 +155,11 @@ cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
 # Windows x64 (from Developer Command Prompt or PowerShell)
-cmake -B build -G "Visual Studio 17 2022" -A x64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
+cmake -B build -A x64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
 # Windows ARM64
-cmake -B build -G "Visual Studio 17 2022" -A ARM64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
+cmake -B build -A ARM64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
 # Linux

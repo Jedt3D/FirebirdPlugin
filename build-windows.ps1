@@ -2,9 +2,9 @@
 # FirebirdPlugin — Windows Build Script
 # ============================================================================
 # Prerequisites:
-#   - Visual Studio 2022 with "Desktop development with C++" workload
-#   - For ARM64: add "MSVC v143 - VS 2022 C++ ARM64 build tools" component
-#   - CMake (ships with VS2022, or install separately)
+#   - Visual Studio 2022+ with "Desktop development with C++" workload
+#   - For ARM64: add "MSVC ARM64 build tools" component (Individual Components)
+#   - CMake (ships with Visual Studio, or install separately)
 #
 # Usage:
 #   .\build-windows.ps1                    # build x64 (default)
@@ -53,7 +53,7 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # Step 1: Find Visual Studio 2022
 # ---------------------------------------------------------------------------
-Write-Host "[1/5] Locating Visual Studio 2022..." -ForegroundColor Yellow
+Write-Host "[1/5] Locating Visual Studio..." -ForegroundColor Yellow
 
 $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vsWhere)) {
@@ -63,10 +63,17 @@ if (-not (Test-Path $vsWhere)) {
 
 $vsPath = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
 if (-not $vsPath) {
-    Write-Error "Visual Studio 2022 with C++ tools not found. Install 'Desktop development with C++' workload."
+    Write-Error "Visual Studio with C++ tools not found. Install 'Desktop development with C++' workload."
     exit 1
 }
+
+# Auto-detect VS version for CMake generator (e.g. "Visual Studio 17 2022", "Visual Studio 18 2026")
+$vsVersionFull = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion 2>$null
+$vsMajor = $vsVersionFull.Split('.')[0]
+$vsYear = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property catalog_productLineVersion 2>$null
+$cmakeGenerator = "Visual Studio $vsMajor $vsYear"
 Write-Host "  Found: $vsPath" -ForegroundColor Green
+Write-Host "  Generator: $cmakeGenerator" -ForegroundColor Green
 
 # Check ARM64 tools if needed
 if ($Arch -eq "arm64") {
@@ -75,8 +82,7 @@ if ($Arch -eq "arm64") {
         Write-Host ""
         Write-Host "  ARM64 build tools not found!" -ForegroundColor Red
         Write-Host "  Open Visual Studio Installer and add:" -ForegroundColor Red
-        Write-Host "    'MSVC v143 - VS 2022 C++ ARM64 build tools'" -ForegroundColor Red
-        Write-Host "  under Individual Components." -ForegroundColor Red
+        Write-Host "    'MSVC ARM64 build tools' under Individual Components." -ForegroundColor Red
         exit 1
     }
     Write-Host "  ARM64 tools: OK" -ForegroundColor Green
@@ -91,7 +97,7 @@ if (Test-Path $vsCMake) {
     $cmakeExe = Get-Command cmake -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 }
 if (-not $cmakeExe) {
-    Write-Error "CMake not found. Install CMake or ensure VS2022 CMake component is installed."
+    Write-Error "CMake not found. Install CMake or ensure the VS CMake component is installed."
     exit 1
 }
 Write-Host "  CMake: $cmakeExe" -ForegroundColor Green
@@ -219,7 +225,7 @@ $cmakeArch = switch ($Arch) {
 $cmakeArgs = @(
     "-B", $BuildDir,
     "-S", $ProjectRoot,
-    "-G", "Visual Studio 17 2022",
+    "-G", $cmakeGenerator,
     "-A", $cmakeArch,
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DFIREBIRD_ROOT=$FirebirdRoot"
