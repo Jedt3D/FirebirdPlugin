@@ -2,6 +2,7 @@
 
 #include "FirebirdDB.h"
 #include <sstream>
+#include <cmath>
 
 // ============================================================================
 // FBDatabase
@@ -205,6 +206,125 @@ bool FBDatabase::writeBlob(const void *data, size_t len, ISC_QUAD &outId) {
     }
 
     isc_close_blob(mStatus, &blob);
+    return true;
+}
+
+bool FBDatabase::databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out) {
+    if (!mConnected) return false;
+    clearError();
+
+    out.assign(512, 0);
+    if (isc_database_info(mStatus, &mDB, itemLen, reinterpret_cast<const char *>(items),
+                          (short)out.size(), out.data())) {
+        captureError();
+        return false;
+    }
+    return true;
+}
+
+const char *FBDatabase::findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const {
+    len = 0;
+    size_t pos = 0;
+
+    while (pos < info.size()) {
+        unsigned char code = (unsigned char)info[pos];
+        if (code == isc_info_end || code == isc_info_truncated) {
+            return nullptr;
+        }
+        if (code == isc_info_error || pos + 3 > info.size()) {
+            return nullptr;
+        }
+
+        short itemLen = (short)isc_vax_integer(&info[pos + 1], 2);
+        if (pos + 3 + itemLen > info.size()) {
+            return nullptr;
+        }
+
+        if (code == item) {
+            len = itemLen;
+            return &info[pos + 3];
+        }
+
+        pos += 3 + itemLen;
+    }
+
+    return nullptr;
+}
+
+bool FBDatabase::serverVersion(std::string &out) {
+    const unsigned char items[] = { isc_info_firebird_version };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!databaseInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_firebird_version, len);
+    if (!value || len <= 0) return false;
+
+    out.assign(value, len);
+    size_t nul = out.find('\0');
+    if (nul != std::string::npos) out.resize(nul);
+    return true;
+}
+
+bool FBDatabase::pageSize(long &out) {
+    const unsigned char items[] = { isc_info_page_size };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!databaseInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_page_size, len);
+    if (!value || len <= 0) return false;
+
+    out = isc_vax_integer(value, len);
+    return true;
+}
+
+bool FBDatabase::databaseSQLDialect(long &out) {
+    const unsigned char items[] = { isc_info_db_sql_dialect };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!databaseInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_db_sql_dialect, len);
+    if (!value || len <= 0) return false;
+
+    out = isc_vax_integer(value, len);
+    return true;
+}
+
+bool FBDatabase::odsVersion(std::string &out) {
+    const unsigned char items[] = { isc_info_ods_version, isc_info_ods_minor_version };
+    std::vector<char> info;
+    short majorLen = 0;
+    short minorLen = 0;
+
+    if (!databaseInfo(items, sizeof(items), info)) return false;
+
+    const char *majorValue = findInfoItem(info, isc_info_ods_version, majorLen);
+    const char *minorValue = findInfoItem(info, isc_info_ods_minor_version, minorLen);
+    if (!majorValue || !minorValue || majorLen <= 0 || minorLen <= 0) return false;
+
+    long major = isc_vax_integer(majorValue, majorLen);
+    long minor = isc_vax_integer(minorValue, minorLen);
+
+    out = std::to_string(major) + "." + std::to_string(minor);
+    return true;
+}
+
+bool FBDatabase::isReadOnly(bool &out) {
+    const unsigned char items[] = { isc_info_db_read_only };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!databaseInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_db_read_only, len);
+    if (!value || len <= 0) return false;
+
+    out = isc_vax_integer(value, len) != 0;
     return true;
 }
 
@@ -443,11 +563,13 @@ bool FBStatement::execute(FBDatabase &db) {
             db.captureError();
             return false;
         }
+        mExecProcRowPending = true;
     } else {
         if (isc_dsql_execute(db.mStatus, &db.mTrans, &mStmt, 1, inParam)) {
             db.captureError();
             return false;
         }
+        mExecProcRowPending = false;
     }
 
     mExecuted = true;
@@ -456,6 +578,14 @@ bool FBStatement::execute(FBDatabase &db) {
 
 bool FBStatement::fetch() {
     if (!mExecuted || !mOutSqlda) return false;
+
+    if (mStmtType == isc_info_sql_stmt_exec_procedure) {
+        if (mExecProcRowPending) {
+            mExecProcRowPending = false;
+            return true;
+        }
+        return false;
+    }
 
     ISC_STATUS_ARRAY status;
     long stat = isc_dsql_fetch(status, &mStmt, 1, mOutSqlda);
@@ -474,6 +604,7 @@ void FBStatement::close() {
     mPrepared = false;
     mExecuted = false;
     mStmtType = 0;
+    mExecProcRowPending = false;
 }
 
 int FBStatement::columnCount() const {
@@ -645,8 +776,9 @@ void FBStatement::bindString(int index, const std::string &val) {
     if (!mInSqlda || index >= mInSqlda->sqld) return;
     XSQLVAR *var = &mInSqlda->sqlvar[index];
 
-    // Reallocate buffer for the string
     short dtype = var->sqltype & ~1;
+
+    // Reallocate buffer for the string
     if (dtype == SQL_VARYING || dtype == SQL_TEXT) {
         if (var->sqldata) free(var->sqldata);
         if (dtype == SQL_VARYING) {
@@ -712,15 +844,15 @@ void FBStatement::bindDouble(int index, double val) {
     } else if (dtype == SQL_SHORT && var->sqlscale < 0) {
         double scaled = val;
         for (int s = 0; s > var->sqlscale; s--) scaled *= 10.0;
-        *(short *)var->sqldata = (short)scaled;
+        *(short *)var->sqldata = (short)std::llround(scaled);
     } else if (dtype == SQL_LONG && var->sqlscale < 0) {
         double scaled = val;
         for (int s = 0; s > var->sqlscale; s--) scaled *= 10.0;
-        *(ISC_LONG *)var->sqldata = (ISC_LONG)scaled;
+        *(ISC_LONG *)var->sqldata = (ISC_LONG)std::llround(scaled);
     } else if (dtype == SQL_INT64 && var->sqlscale < 0) {
         double scaled = val;
         for (int s = 0; s > var->sqlscale; s--) scaled *= 10.0;
-        *(ISC_INT64 *)var->sqldata = (ISC_INT64)scaled;
+        *(ISC_INT64 *)var->sqldata = (ISC_INT64)std::llround(scaled);
     } else {
         var->sqltype = SQL_DOUBLE | (var->sqltype & 1);
         if (var->sqldata) free(var->sqldata);

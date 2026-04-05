@@ -6,6 +6,7 @@
 #include <cstring>
 #include <string>
 #include <sstream>
+#include <ctime>
 
 // ============================================================================
 // Forward declarations — all callback functions
@@ -43,6 +44,11 @@ static RBBoolean    fbCursorIsEOF(dbCursor *);
 static void         fbClassConstructor(REALobject instance);
 static void         fbClassDestructor(REALobject instance);
 static RBBoolean    fbClassConnect(REALobject instance);
+static REALstring   fbClassServerVersion(REALobject instance);
+static int32_t      fbClassPageSize(REALobject instance);
+static int32_t      fbClassDatabaseSQLDialect(REALobject instance);
+static REALstring   fbClassODSVersion(REALobject instance);
+static RBBoolean    fbClassIsReadOnly(REALobject instance);
 
 // Prepared statement class methods
 static void         fbPrepStmtConstructor(REALobject instance);
@@ -51,6 +57,9 @@ static void         fbPrepStmtBindString(REALobject instance, int32_t index, REA
 static void         fbPrepStmtBindInt(REALobject instance, int32_t index, RBInt64 value);
 static void         fbPrepStmtBindDouble(REALobject instance, int32_t index, double value);
 static void         fbPrepStmtBindBoolean(REALobject instance, int32_t index, RBBoolean value);
+static void         fbPrepStmtBindDateTime(REALobject instance, int32_t index, REALobject value);
+static void         fbPrepStmtBindTextBlob(REALobject instance, int32_t index, REALstring value);
+static void         fbPrepStmtBindBinaryBlob(REALobject instance, int32_t index, REALobject value);
 static void         fbPrepStmtBindNull(REALobject instance, int32_t index);
 static REALdbCursor fbPrepStmtSelectSQL(REALobject instance);
 static void         fbPrepStmtExecuteSQL(REALobject instance);
@@ -143,6 +152,11 @@ static REALproperty sFirebirdClassProperties[] = {
 
 static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassConnect, REALnoImplementation, "Connect() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassServerVersion, REALnoImplementation, "ServerVersion() As String", REALconsoleSafe },
+    { (REALproc)fbClassPageSize, REALnoImplementation, "PageSize() As Integer", REALconsoleSafe },
+    { (REALproc)fbClassDatabaseSQLDialect, REALnoImplementation, "DatabaseSQLDialect() As Integer", REALconsoleSafe },
+    { (REALproc)fbClassODSVersion, REALnoImplementation, "ODSVersion() As String", REALconsoleSafe },
+    { (REALproc)fbClassIsReadOnly, REALnoImplementation, "IsReadOnly() As Boolean", REALconsoleSafe },
 };
 
 static REALclassDefinition sFirebirdDatabaseClass = {
@@ -182,6 +196,12 @@ static REALmethodDefinition sFirebirdPreparedStmtMethods[] = {
       "Bind(index As Integer, value As Double)", REALconsoleSafe },
     { (REALproc)fbPrepStmtBindBoolean, REALnoImplementation,
       "Bind(index As Integer, value As Boolean)", REALconsoleSafe },
+    { (REALproc)fbPrepStmtBindDateTime, REALnoImplementation,
+      "Bind(index As Integer, value As DateTime)", REALconsoleSafe },
+    { (REALproc)fbPrepStmtBindTextBlob, REALnoImplementation,
+      "BindTextBlob(index As Integer, value As String)", REALconsoleSafe },
+    { (REALproc)fbPrepStmtBindBinaryBlob, REALnoImplementation,
+      "BindBinaryBlob(index As Integer, value As MemoryBlock)", REALconsoleSafe },
     { (REALproc)fbPrepStmtBindNull, REALnoImplementation,
       "BindNull(index As Integer)", REALconsoleSafe },
     { (REALproc)fbPrepStmtSelectSQL, REALnoImplementation,
@@ -234,6 +254,20 @@ static REALstring StdToReal(const std::string &s) {
     return REALBuildStringWithEncoding(s.c_str(), (int)s.size(), kREALTextEncodingUTF8);
 }
 
+static FirebirdDbData *GetFirebirdDbData(REALobject instance) {
+    if (!instance) return nullptr;
+    REALdbDatabase realDb = (REALdbDatabase)instance;
+    return (FirebirdDbData *)REALGetDBFromREALdbDatabase(realDb);
+}
+
+static short ToXojoDbShort(short value) {
+    unsigned short v = (unsigned short)value;
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+    v = (unsigned short)((v << 8) | (v >> 8));
+#endif
+    return (short)v;
+}
+
 static dbFieldType FirebirdTypeToXojo(short fbType, short scale, short subtype) {
     short dtype = fbType & ~1;
     switch (dtype) {
@@ -275,6 +309,95 @@ static FirebirdCursorData *NewCursorData(FBDatabase *db, FBStatement *stmt) {
     return cd;
 }
 
+static bool IsMemoryBlockObject(REALobject value) {
+    static REALclassRef memoryBlockClass = REALGetClassRef("MemoryBlock");
+    return value && memoryBlockClass && REALObjectIsA(value, memoryBlockClass);
+}
+
+static bool IsDateTimeObject(REALobject value) {
+    static REALclassRef dateTimeClass = REALGetClassRef("DateTime");
+    return value && dateTimeClass && REALObjectIsA(value, dateTimeClass);
+}
+
+static bool FillTmFromDateTime(REALobject value, struct tm &outTm) {
+    if (!IsDateTimeObject(value)) return false;
+
+    RBInteger year = 0;
+    RBInteger month = 0;
+    RBInteger day = 0;
+    RBInteger hour = 0;
+    RBInteger minute = 0;
+    RBInteger second = 0;
+
+    if (!REALGetPropValueInteger(value, "Year", &year)) return false;
+    if (!REALGetPropValueInteger(value, "Month", &month)) return false;
+    if (!REALGetPropValueInteger(value, "Day", &day)) return false;
+    if (!REALGetPropValueInteger(value, "Hour", &hour)) return false;
+    if (!REALGetPropValueInteger(value, "Minute", &minute)) return false;
+    if (!REALGetPropValueInteger(value, "Second", &second)) return false;
+
+    memset(&outTm, 0, sizeof(outTm));
+    outTm.tm_year = (int)year - 1900;
+    outTm.tm_mon = (int)month - 1;
+    outTm.tm_mday = (int)day;
+    outTm.tm_hour = (int)hour;
+    outTm.tm_min = (int)minute;
+    outTm.tm_sec = (int)second;
+    outTm.tm_isdst = -1;
+    return true;
+}
+
+static bool BindDateTimeValue(FBStatement *stmt, int index, REALobject value) {
+    if (!stmt || !value) return false;
+
+    struct tm tmValue;
+    if (!FillTmFromDateTime(value, tmValue)) return false;
+
+    switch (stmt->paramBaseType(index)) {
+        case SQL_TYPE_DATE: {
+            ISC_DATE sqlDate = 0;
+            isc_encode_sql_date(&tmValue, &sqlDate);
+            stmt->bindDate(index, sqlDate);
+            return true;
+        }
+        case SQL_TYPE_TIME: {
+            ISC_TIME sqlTime = 0;
+            isc_encode_sql_time(&tmValue, &sqlTime);
+            stmt->bindTime(index, sqlTime);
+            return true;
+        }
+        case SQL_TIMESTAMP: {
+            ISC_TIMESTAMP sqlTimestamp = {};
+            isc_encode_timestamp(&tmValue, &sqlTimestamp);
+            stmt->bindTimestamp(index, sqlTimestamp);
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool BindTextBlobValue(FBStatement *stmt, FBDatabase *db, int index, REALstring value) {
+    if (!stmt || !db || !value) return false;
+
+    std::string text = RealToStd(value);
+    stmt->bindBlob(index, *db, text.data(), text.size());
+    return true;
+}
+
+static bool BindBinaryBlobValue(FBStatement *stmt, FBDatabase *db, int index, REALobject value) {
+    if (!stmt || !db || !IsMemoryBlockObject(value)) return false;
+
+    REALmemoryBlock mem = (REALmemoryBlock)value;
+    void *ptr = REALMemoryBlockGetPtr(mem);
+    RBInteger size = REALMemoryBlockGetSize(mem);
+    if (size < 0) return false;
+    if (!ptr && size > 0) return false;
+
+    stmt->bindBlob(index, *db, ptr, (size_t)size);
+    return true;
+}
+
 static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
     if (!params || !stmt) return;
     RBInteger count = REALGetArrayUBound(params);
@@ -293,10 +416,33 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
         short ptype = stmt->paramBaseType((int)i);
         bool bound = false;
 
+        if (ptype == SQL_TYPE_DATE || ptype == SQL_TYPE_TIME || ptype == SQL_TIMESTAMP) {
+            REALobject dateTimeValue = nullptr;
+            if (REALGetPropValue(variant, "DateTimeValue", &dateTimeValue) && dateTimeValue) {
+                bound = BindDateTimeValue(stmt, (int)i, dateTimeValue);
+            } else if (REALGetPropValue(variant, "ObjectValue", &dateTimeValue) && dateTimeValue) {
+                bound = BindDateTimeValue(stmt, (int)i, dateTimeValue);
+            }
+        } else if (ptype == SQL_BLOB) {
+            REALobject objectValue = nullptr;
+            if (REALGetPropValue(variant, "ObjectValue", &objectValue) && objectValue) {
+                bound = BindBinaryBlobValue(stmt, db, (int)i, objectValue);
+            }
+
+            if (!bound) {
+                REALstring strVal = nullptr;
+                if (REALGetPropValueString(variant, "StringValue", &strVal) && strVal) {
+                    bound = BindTextBlobValue(stmt, db, (int)i, strVal);
+                    REALUnlockString(strVal);
+                }
+            }
+        }
+
         switch (ptype) {
             case SQL_SHORT:
             case SQL_LONG:
             case SQL_INT64: {
+                if (bound) break;
                 if (stmt->paramScale((int)i) < 0) {
                     double dblVal = 0;
                     if (REALGetPropValueDouble(variant, "DoubleValue", &dblVal)) {
@@ -314,6 +460,7 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
             }
             case SQL_FLOAT:
             case SQL_DOUBLE: {
+                if (bound) break;
                 double dblVal = 0;
                 if (REALGetPropValueDouble(variant, "DoubleValue", &dblVal)) {
                     stmt->bindDouble((int)i, dblVal);
@@ -321,6 +468,17 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
                 }
                 break;
             }
+#ifdef SQL_BOOLEAN
+            case SQL_BOOLEAN: {
+                if (bound) break;
+                bool boolVal = false;
+                if (REALGetPropValueBoolean(variant, "BooleanValue", &boolVal)) {
+                    stmt->bindBoolean((int)i, boolVal);
+                    bound = true;
+                }
+                break;
+            }
+#endif
             default:
                 break;
         }
@@ -679,9 +837,9 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             memset(&t, 0, sizeof(t));
             isc_decode_sql_date(&val.dateVal, &t);
             dbDate *dd = (dbDate *)malloc(sizeof(dbDate));
-            dd->year = t.tm_year + 1900;
-            dd->month = t.tm_mon + 1;
-            dd->day = t.tm_mday;
+            dd->year = ToXojoDbShort((short)(t.tm_year + 1900));
+            dd->month = ToXojoDbShort((short)(t.tm_mon + 1));
+            dd->day = ToXojoDbShort((short)t.tm_mday);
             *type = (unsigned char)dbTypeDate;
             *value = dd;
             *length = sizeof(dbDate);
@@ -694,9 +852,9 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             memset(&t, 0, sizeof(t));
             isc_decode_sql_time(&val.timeVal, &t);
             dbTime *dt = (dbTime *)malloc(sizeof(dbTime));
-            dt->hour = t.tm_hour;
-            dt->minute = t.tm_min;
-            dt->second = t.tm_sec;
+            dt->hour = ToXojoDbShort((short)t.tm_hour);
+            dt->minute = ToXojoDbShort((short)t.tm_min);
+            dt->second = ToXojoDbShort((short)t.tm_sec);
             *type = (unsigned char)dbTypeTime;
             *value = dt;
             *length = sizeof(dbTime);
@@ -709,12 +867,12 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             memset(&t, 0, sizeof(t));
             isc_decode_timestamp(&val.tsVal, &t);
             dbTimeStamp *ts = (dbTimeStamp *)malloc(sizeof(dbTimeStamp));
-            ts->year = t.tm_year + 1900;
-            ts->month = t.tm_mon + 1;
-            ts->day = t.tm_mday;
-            ts->hour = t.tm_hour;
-            ts->minute = t.tm_min;
-            ts->second = t.tm_sec;
+            ts->year = ToXojoDbShort((short)(t.tm_year + 1900));
+            ts->month = ToXojoDbShort((short)(t.tm_mon + 1));
+            ts->day = ToXojoDbShort((short)t.tm_mday);
+            ts->hour = ToXojoDbShort((short)t.tm_hour);
+            ts->minute = ToXojoDbShort((short)t.tm_min);
+            ts->second = ToXojoDbShort((short)t.tm_sec);
             *type = (unsigned char)dbTypeTimeStamp;
             *value = ts;
             *length = sizeof(dbTimeStamp);
@@ -892,6 +1050,51 @@ static RBBoolean fbClassConnect(REALobject instance) {
     return true;
 }
 
+static REALstring fbClassServerVersion(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return StdToReal("");
+
+    std::string value;
+    if (!fbd->db->serverVersion(value)) return StdToReal("");
+    return StdToReal(value);
+}
+
+static int32_t fbClassPageSize(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return 0;
+
+    long value = 0;
+    if (!fbd->db->pageSize(value)) return 0;
+    return (int32_t)value;
+}
+
+static int32_t fbClassDatabaseSQLDialect(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return 0;
+
+    long value = 0;
+    if (!fbd->db->databaseSQLDialect(value)) return 0;
+    return (int32_t)value;
+}
+
+static REALstring fbClassODSVersion(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return StdToReal("");
+
+    std::string value;
+    if (!fbd->db->odsVersion(value)) return StdToReal("");
+    return StdToReal(value);
+}
+
+static RBBoolean fbClassIsReadOnly(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+
+    bool value = false;
+    if (!fbd->db->isReadOnly(value)) return false;
+    return value;
+}
+
 // ============================================================================
 // FirebirdPreparedStatement Class Implementation
 // ============================================================================
@@ -937,6 +1140,48 @@ static void fbPrepStmtBindBoolean(REALobject instance, int32_t index, RBBoolean 
     ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
     if (!data->stmt) return;
     data->stmt->bindBoolean(index, value != 0);
+}
+
+static void fbPrepStmtBindDateTime(REALobject instance, int32_t index, REALobject value) {
+    ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
+    if (!data->stmt) return;
+
+    if (!value) {
+        data->stmt->bindNull(index);
+        return;
+    }
+
+    if (!BindDateTimeValue(data->stmt, index, value)) {
+        data->stmt->bindNull(index);
+    }
+}
+
+static void fbPrepStmtBindTextBlob(REALobject instance, int32_t index, REALstring value) {
+    ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
+    if (!data->stmt) return;
+
+    if (!value) {
+        data->stmt->bindNull(index);
+        return;
+    }
+
+    if (!BindTextBlobValue(data->stmt, data->db, index, value)) {
+        data->stmt->bindNull(index);
+    }
+}
+
+static void fbPrepStmtBindBinaryBlob(REALobject instance, int32_t index, REALobject value) {
+    ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
+    if (!data->stmt) return;
+
+    if (!value) {
+        data->stmt->bindNull(index);
+        return;
+    }
+
+    if (!BindBinaryBlobValue(data->stmt, data->db, index, value)) {
+        data->stmt->bindNull(index);
+    }
 }
 
 static void fbPrepStmtBindNull(REALobject instance, int32_t index) {

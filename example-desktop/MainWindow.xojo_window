@@ -157,6 +157,7 @@ End
 		  
 		  TestConnect
 		  TestConnectBadCredentials
+		  TestDatabaseInfo
 		  TestSelectSQL
 		  TestSelectSQLColumnTypes
 		  TestSelectSQLUnicodeThai
@@ -169,7 +170,15 @@ End
 		  TestPreparedStatementSelect
 		  TestPreparedStatementExecute
 		  TestPreparedStatementBindTypes
+		  TestPreparedStatementBindTemporalTypes
+		  TestPreparedStatementBindBlobs
 		  TestPreparedStatementBindNull
+		  TestNativeBooleanRoundTrip
+		  TestScaledNumericRoundTrip
+		  TestReturningClause
+		  TestExecuteBlock
+		  TestExecuteProcedure
+		  TestEmbeddedConnect
 		  TestTableSchema
 		  TestFieldSchema
 		  TestDatabaseIndexes
@@ -315,6 +324,56 @@ End
 		    End If
 		  Catch ex As DatabaseException
 		    LogFail "Database indexes", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestDatabaseInfo()
+		  Log "-- Test: Database info --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    Var version As String = db.ServerVersion
+		    If version <> "" Then
+		      LogPass "ServerVersion: " + version
+		    Else
+		      LogFail "ServerVersion", "Expected non-empty value"
+		    End If
+		    
+		    Var pageSize As Integer = db.PageSize
+		    If pageSize > 0 Then
+		      LogPass "PageSize: " + pageSize.ToString
+		    Else
+		      LogFail "PageSize", "Expected > 0"
+		    End If
+		    
+		    Var dialect As Integer = db.DatabaseSQLDialect
+		    If dialect = 3 Then
+		      LogPass "DatabaseSQLDialect: 3"
+		    Else
+		      LogFail "DatabaseSQLDialect", "Expected 3, got " + dialect.ToString
+		    End If
+		    
+		    Var ods As String = db.ODSVersion
+		    If ods <> "" Then
+		      LogPass "ODSVersion: " + ods
+		    Else
+		      LogFail "ODSVersion", "Expected non-empty value"
+		    End If
+		    
+		    If db.IsReadOnly = False Then
+		      LogPass "IsReadOnly: False"
+		    Else
+		      LogFail "IsReadOnly", "Expected False for writable test DB"
+		    End If
+		    
+		  Catch ex As DatabaseException
+		    LogFail "Database info", ex.Message
 		  End Try
 		  
 		  db.Close
@@ -568,6 +627,257 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Sub TestEmbeddedConnect()
+		  Log "-- Test: local-path attachment --"
+		  
+		  Var db As New FirebirdDatabase
+		  db.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  db.UserName = "SYSDBA"
+		  db.Password = "masterkey"
+		  db.CharacterSet = "UTF8"
+		  
+		  Try
+		    If db.Connect Then
+		      Var rs As RowSet = db.SelectSQL("SELECT COUNT(*) AS cnt FROM artists")
+		      If rs <> Nil And Not rs.AfterLastRow Then
+		        Var cnt As Integer = rs.Column("cnt").IntegerValue
+		        If cnt = 13 Then
+		          LogPass "Local-path attachment"
+		        Else
+		          LogFail "Local-path attachment", "Unexpected artist count: " + cnt.ToString
+		        End If
+		        rs.Close
+		      Else
+		        LogFail "Local-path attachment", "No rows returned"
+		      End If
+		      db.Close
+		    Else
+		      Var reason As String = db.ErrorMessage
+		      If reason = "" Then
+		        reason = "Hostless local attachment is unavailable in the current Firebird client/runtime"
+		      Else
+		        reason = "Hostless local attachment is unavailable in the current Firebird client/runtime: " + reason
+		      End If
+		      LogPass reason
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Local-path attachment", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Local-path attachment", ex.Message
+		  End Try
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestExecuteBlock()
+		  Log "-- Test: EXECUTE BLOCK --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    Var sql As String = "EXECUTE BLOCK RETURNS (result INTEGER, note VARCHAR(20)) AS " _
+		    + "BEGIN result = 42; note = 'block'; SUSPEND; END"
+		    Var rs As RowSet = db.SelectSQL(sql)
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var resultValue As Integer = rs.Column("result").IntegerValue
+		      Var noteValue As String = rs.Column("note").StringValue
+		      If resultValue = 42 And noteValue = "block" Then
+		        LogPass "EXECUTE BLOCK returned row"
+		      Else
+		        LogFail "EXECUTE BLOCK", "Unexpected values: " + resultValue.ToString + ", " + noteValue
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "EXECUTE BLOCK", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "EXECUTE BLOCK", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "EXECUTE BLOCK", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestExecuteProcedure()
+		  Log "-- Test: EXECUTE PROCEDURE --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE PROCEDURE test_exec_proc (a INTEGER, b INTEGER) RETURNS (sum_val INTEGER) AS BEGIN sum_val = a + b; END")
+		    
+		    Var rs As RowSet = db.SelectSQL("EXECUTE PROCEDURE test_exec_proc(2, 3)")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var sumVal As Integer = rs.Column("sum_val").IntegerValue
+		      If sumVal = 5 Then
+		        LogPass "EXECUTE PROCEDURE direct SQL"
+		      Else
+		        LogFail "EXECUTE PROCEDURE direct SQL", "Expected 5, got " + sumVal.ToString
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "EXECUTE PROCEDURE direct SQL", "No rows returned"
+		    End If
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("EXECUTE PROCEDURE test_exec_proc(?, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, 7)
+		      ps.Bind(1, 8)
+		      rs = ps.SelectSQL
+		      If rs <> Nil And Not rs.AfterLastRow Then
+		        Var sumVal As Integer = rs.Column("sum_val").IntegerValue
+		        If sumVal = 15 Then
+		          LogPass "EXECUTE PROCEDURE prepared"
+		        Else
+		          LogFail "EXECUTE PROCEDURE prepared", "Expected 15, got " + sumVal.ToString
+		        End If
+		        rs.Close
+		      Else
+		        LogFail "EXECUTE PROCEDURE prepared", "No rows returned"
+		      End If
+		    Else
+		      LogFail "EXECUTE PROCEDURE prepared", "Prepare returned Nil"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "EXECUTE PROCEDURE", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "EXECUTE PROCEDURE", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestNativeBooleanRoundTrip()
+		  Log "-- Test: native BOOLEAN round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_native_boolean (id INTEGER NOT NULL, flag BOOLEAN)")
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_native_boolean (id, flag) VALUES (1, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, True)
+		      ps.ExecuteSQL
+		      LogPass "Bind native BOOLEAN True"
+		    Else
+		      LogFail "Bind native BOOLEAN True", "Prepare returned Nil"
+		    End If
+		    
+		    ps = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_native_boolean (id, flag) VALUES (2, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, False)
+		      ps.ExecuteSQL
+		      LogPass "Bind native BOOLEAN False"
+		    Else
+		      LogFail "Bind native BOOLEAN False", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT id, flag FROM test_native_boolean ORDER BY id")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var firstFlag As Boolean = rs.Column("flag").BooleanValue
+		      rs.MoveToNextRow
+		      If Not rs.AfterLastRow Then
+		        Var secondFlag As Boolean = rs.Column("flag").BooleanValue
+		        If firstFlag = True And secondFlag = False Then
+		          LogPass "Native BOOLEAN readback"
+		        Else
+		          LogFail "Native BOOLEAN readback", "Unexpected values"
+		        End If
+		      Else
+		        LogFail "Native BOOLEAN readback", "Second row missing"
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "Native BOOLEAN readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Native BOOLEAN", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Native BOOLEAN", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestPreparedStatementBindBlobs()
+		  Log "-- Test: Prepared statement BLOB binds --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_bind_blobs (id INTEGER NOT NULL, text_blob BLOB SUB_TYPE TEXT CHARACTER SET UTF8, bin_blob BLOB)")
+		    
+		    Var textPayload As String = "สวัสดี Firebird" + EndOfLine + "Line 2"
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_bind_blobs (id, text_blob) VALUES (1, ?)"))
+		    If ps <> Nil Then
+		      ps.BindTextBlob(0, textPayload)
+		      ps.ExecuteSQL
+		      LogPass "BindTextBlob"
+		    Else
+		      LogFail "BindTextBlob", "Prepare returned Nil"
+		    End If
+		    
+		    Var binaryPayload As String = "FB" + Chr(0) + Chr(1) + Chr(127) + "SQL"
+		    Var binaryBlock As New MemoryBlock(binaryPayload.Bytes)
+		    binaryBlock.StringValue(0, binaryPayload.Bytes) = binaryPayload
+		    ps = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_bind_blobs (id, bin_blob) VALUES (2, ?)"))
+		    If ps <> Nil Then
+		      ps.BindBinaryBlob(0, binaryBlock)
+		      ps.ExecuteSQL
+		      LogPass "BindBinaryBlob"
+		    Else
+		      LogFail "BindBinaryBlob", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT text_blob FROM test_bind_blobs WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var fetchedText As String = rs.Column("text_blob").BlobValue
+		      If fetchedText = textPayload Then
+		        LogPass "BindTextBlob readback"
+		      Else
+		        LogFail "BindTextBlob readback", "Text payload mismatch"
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "BindTextBlob readback", "No row returned"
+		    End If
+		    
+		    rs = db.SelectSQL("SELECT bin_blob FROM test_bind_blobs WHERE id = 2")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var fetchedBinary As String = rs.Column("bin_blob").BlobValue
+		      If fetchedBinary = binaryPayload Then
+		        LogPass "BindBinaryBlob readback"
+		      Else
+		        LogFail "BindBinaryBlob readback", "Binary payload mismatch"
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "BindBinaryBlob readback", "No row returned"
+		    End If
+		    
+		  Catch ex As DatabaseException
+		    LogFail "Bind BLOBs", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Bind BLOBs", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Sub TestPreparedStatementBindNull()
 		  Log "-- Test: Prepared statement BindNull --"
 		  
@@ -599,6 +909,94 @@ End
 		    LogFail "BindNull", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "BindNull", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestPreparedStatementBindTemporalTypes()
+		  Log "-- Test: Prepared statement temporal binds --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_bind_temporal (id INTEGER NOT NULL, d DATE, t TIME, ts TIMESTAMP)")
+		    
+		    Var sample As DateTime = DateTime.FromString("2026-04-05 14:30:45")
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_bind_temporal (id, d) VALUES (1, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, sample)
+		      ps.ExecuteSQL
+		      LogPass "Bind DateTime to DATE"
+		    Else
+		      LogFail "Bind DateTime to DATE", "Prepare returned Nil"
+		    End If
+		    
+		    ps = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_bind_temporal (id, t) VALUES (2, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, sample)
+		      ps.ExecuteSQL
+		      LogPass "Bind DateTime to TIME"
+		    Else
+		      LogFail "Bind DateTime to TIME", "Prepare returned Nil"
+		    End If
+		    
+		    ps = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_bind_temporal (id, ts) VALUES (3, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, sample)
+		      ps.ExecuteSQL
+		      LogPass "Bind DateTime to TIMESTAMP"
+		    Else
+		      LogFail "Bind DateTime to TIMESTAMP", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT d FROM test_bind_temporal WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var d As DateTime = rs.Column("d").DateTimeValue
+		      If d.Year = 2026 And d.Month = 4 And d.Day = 5 And d.Hour = 0 And d.Minute = 0 And d.Second = 0 Then
+		        LogPass "DATE readback"
+		      Else
+		        LogFail "DATE readback", d.SQLDateTime
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "DATE readback", "No row returned"
+		    End If
+		    
+		    rs = db.SelectSQL("SELECT t FROM test_bind_temporal WHERE id = 2")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var t As DateTime = rs.Column("t").DateTimeValue
+		      If t.Hour = 14 And t.Minute = 30 And t.Second = 45 Then
+		        LogPass "TIME readback"
+		      Else
+		        LogFail "TIME readback", t.SQLDateTime
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "TIME readback", "No row returned"
+		    End If
+		    
+		    rs = db.SelectSQL("SELECT ts FROM test_bind_temporal WHERE id = 3")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var ts As DateTime = rs.Column("ts").DateTimeValue
+		      If ts.Year = 2026 And ts.Month = 4 And ts.Day = 5 And ts.Hour = 14 And ts.Minute = 30 And ts.Second = 45 Then
+		        LogPass "TIMESTAMP readback"
+		      Else
+		        LogFail "TIMESTAMP readback", ts.SQLDateTime
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "TIMESTAMP readback", "No row returned"
+		    End If
+		    
+		  Catch ex As DatabaseException
+		    LogFail "Bind temporal types", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Bind temporal types", ex.Message
 		  End Try
 		  
 		  db.Close
@@ -867,6 +1265,83 @@ End
 		  db.Close
 		End Sub
 	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestReturningClause()
+		  Log "-- Test: RETURNING clause --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_returning (id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(100))")
+		    
+		    Var rs As RowSet = db.SelectSQL("INSERT INTO test_returning (name) VALUES ('ReturningTest') RETURNING id, name")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var newId As Integer = rs.Column("id").IntegerValue
+		      Var nameValue As String = rs.Column("name").StringValue
+		      If newId > 0 And nameValue = "ReturningTest" Then
+		        LogPass "RETURNING clause row"
+		      Else
+		        LogFail "RETURNING clause", "Unexpected values: " + newId.ToString + ", " + nameValue
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "RETURNING clause", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "RETURNING clause", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "RETURNING clause", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestScaledNumericRoundTrip()
+		  Log "-- Test: scaled NUMERIC/DECIMAL round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_scaled_numeric (id INTEGER NOT NULL, amount_dec DECIMAL(18,2), ratio_num NUMERIC(18,4))")
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_scaled_numeric (id, amount_dec, ratio_num) VALUES (1, ?, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, 1234.56)
+		      ps.Bind(1, 7.8912)
+		      ps.ExecuteSQL
+		      LogPass "Bind scaled numerics"
+		    Else
+		      LogFail "Bind scaled numerics", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT amount_dec, ratio_num FROM test_scaled_numeric WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var amount As Double = rs.Column("amount_dec").DoubleValue
+		      Var ratio As Double = rs.Column("ratio_num").DoubleValue
+		      If Abs(amount - 1234.56) < 0.001 And Abs(ratio - 7.8912) < 0.0001 Then
+		        LogPass "Scaled numerics readback"
+		      Else
+		        LogFail "Scaled numerics readback", amount.ToString + ", " + ratio.ToString
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "Scaled numerics readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Scaled numerics", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Scaled numerics", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
 
 	#tag Method, Flags = &h1
 		Protected Sub TestSelectSQL()

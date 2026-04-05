@@ -102,6 +102,7 @@ private:
     int             mStmtType = 0;
     bool            mPrepared = false;
     bool            mExecuted = false;
+    bool            mExecProcRowPending = false;
 
     friend class FBDatabase;
 };
@@ -146,6 +147,13 @@ public:
     // Create a BLOB, returns its ID
     bool writeBlob(const void *data, size_t len, ISC_QUAD &outId);
 
+    // Database information helpers
+    bool serverVersion(std::string &out);
+    bool pageSize(long &out);
+    bool databaseSQLDialect(long &out);
+    bool odsVersion(std::string &out);
+    bool isReadOnly(bool &out);
+
     // Error state
     long lastErrorCode() const { return mErrorCode; }
     const std::string &lastErrorString() const { return mErrorMsg; }
@@ -162,6 +170,8 @@ public:
     static const char *indexListSQL();         // needs table name parameter
 
 private:
+    bool databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
+    const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();
 

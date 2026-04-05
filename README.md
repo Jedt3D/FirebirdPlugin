@@ -2,13 +2,16 @@
 
 A native Xojo plugin that adds **FirebirdSQL** database support to Xojo, integrating with the built-in `Database` class hierarchy (RowSet, PreparedStatement, etc.) just like the MySQL and PostgreSQL plugins that ship with Xojo.
 
-Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xojo Plugin SDK**. Compatible with Firebird 5.x and 6.x.
+Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xojo Plugin SDK**. Compatible with Firebird 4.x, 5.x, and 6.x.
 
 ## Features
 
 - **FirebirdDatabase** class — inherits from `Database`, works with Xojo API 2.0 patterns
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
+- Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
+- Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
+- Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
 - Schema introspection: `TableSchema`, `FieldSchema`, `IndexSchema`
 - Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`
@@ -53,6 +56,46 @@ End Try
 
 More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOBs, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
 
+## Firebird-Specific Metadata
+
+`FirebirdDatabase` exposes a small typed metadata surface over `isc_database_info`:
+
+```vb
+Var db As New FirebirdDatabase
+db.DatabaseName = "/var/firebird/data/myapp.fdb"
+db.UserName = "SYSDBA"
+db.Password = "masterkey"
+db.Connect
+
+System.DebugLog("ServerVersion: " + db.ServerVersion)
+System.DebugLog("PageSize: " + db.PageSize.ToString)
+System.DebugLog("SQL dialect: " + db.DatabaseSQLDialect.ToString)
+System.DebugLog("ODSVersion: " + db.ODSVersion)
+System.DebugLog("ReadOnly: " + db.IsReadOnly.ToString)
+```
+
+## PreparedStatement Type Binds
+
+The plugin supports direct prepared binding for Firebird temporal and BLOB types:
+
+```vb
+Var createdAt As DateTime = DateTime.FromString("2026-04-06 09:30:00")
+
+Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
+  db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))
+
+ps.Bind(0, createdAt)                  // DATE
+ps.Bind(1, createdAt)                  // TIME
+ps.Bind(2, createdAt)                  // TIMESTAMP
+ps.BindTextBlob(3, "hello from Firebird")
+
+Var payloadText As String = "FB" + Chr(0) + Chr(1) + "SQL"
+Var payload As New MemoryBlock(payloadText.Bytes)
+payload.StringValue(0, payloadText.Bytes) = payloadText
+ps.BindBinaryBlob(4, payload)
+ps.ExecuteSQL
+```
+
 ## Project Structure
 
 ```
@@ -66,7 +109,7 @@ FirebirdPlugin/
 │   ├── Includes/              # Xojo Plugin SDK headers (rb_plugin.h, etc.)
 │   └── GlueCode/             # PluginMain.cpp, PluginMainCocoa.mm
 ├── examples/
-│   ├── FirebirdExample_API2.xojo_code   # 15 usage examples
+│   ├── FirebirdExample_API2.xojo_code   # 17 usage examples
 │   └── QuickReference.xojo_code         # Side-by-side comparison with MySQL/PostgreSQL
 ├── .github/workflows/
 │   └── build.yml              # GitHub Actions CI for all platforms

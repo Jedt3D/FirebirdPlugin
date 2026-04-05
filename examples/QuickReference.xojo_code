@@ -97,6 +97,35 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// FIREBIRD-SPECIFIC METHODS
+// ---------------------------------------------------------------------------
+
+Sub FirebirdOnlySurface(db As FirebirdDatabase)
+  // Database info helpers
+  Var version As String = db.ServerVersion
+  Var pageSize As Integer = db.PageSize
+  Var dialect As Integer = db.DatabaseSQLDialect
+  Var ods As String = db.ODSVersion
+  Var readOnly As Boolean = db.IsReadOnly
+
+  // Prepared temporal and BLOB binds
+  Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
+    db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))
+
+  Var stamp As DateTime = DateTime.FromString("2026-04-06 09:30:00")
+  ps.Bind(0, stamp)          // DATE
+  ps.Bind(1, stamp)          // TIME
+  ps.Bind(2, stamp)          // TIMESTAMP
+  ps.BindTextBlob(3, "hello")
+
+  Var payloadText As String = "FB" + Chr(0) + Chr(1) + "SQL"
+  Var payload As New MemoryBlock(payloadText.Bytes)
+  payload.StringValue(0, payloadText.Bytes) = payloadText
+  ps.BindBinaryBlob(4, payload)
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // FIREBIRD SQL DIFFERENCES FROM MYSQL/POSTGRESQL
 // ---------------------------------------------------------------------------
 
