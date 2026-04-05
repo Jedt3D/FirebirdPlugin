@@ -116,6 +116,17 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
     Var lockTimeout As Integer = db.TransactionLockTimeout
   End If
 
+  // Explicit transaction options (Firebird-specific)
+  Var started As Boolean = db.BeginTransactionWithOptions("read committed read consistency", True, 0)
+  If started Then
+    Var explicitIsolation As String = db.TransactionIsolation
+    Var explicitAccessMode As String = db.TransactionAccessMode
+    Var explicitTimeout As Integer = db.TransactionLockTimeout
+    db.RollbackTransaction
+  Else
+    Var beginError As String = db.ErrorMessage
+  End If
+
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
     db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))

@@ -220,15 +220,15 @@ The checklist below compares the current Xojo plugin to that surface.
 | Floating / scaled numeric binding | XSQLDA buffers for `SQL_FLOAT`, `SQL_DOUBLE`, scaled numerics | `[x]` | Exposed to Xojo through `Double` and internal scaled handling |
 | Boolean binding | `SQL_BOOLEAN` or legacy numeric fallback | `[x]` | Exposed to Xojo |
 | NULL binding | `sqlind = -1` | `[x]` | Exposed to Xojo |
-| Date binding | `SQL_TYPE_DATE` | `[-]` | Implemented in `FBStatement`, not exposed in `FirebirdPreparedStatement` |
-| Time binding | `SQL_TYPE_TIME` | `[-]` | Implemented in `FBStatement`, not exposed in `FirebirdPreparedStatement` |
-| Timestamp binding | `SQL_TIMESTAMP` | `[-]` | Implemented in `FBStatement`, not exposed in `FirebirdPreparedStatement` |
-| BLOB binding | `isc_create_blob2`, `isc_put_segment` | `[-]` | Implemented in `FBStatement`, not exposed in Xojo prepared statement API |
+| Date binding | `SQL_TYPE_DATE` | `[x]` | Exposed through `FirebirdPreparedStatement.Bind(index, value As DateTime)` |
+| Time binding | `SQL_TYPE_TIME` | `[x]` | Exposed through `FirebirdPreparedStatement.Bind(index, value As DateTime)` |
+| Timestamp binding | `SQL_TIMESTAMP` | `[x]` | Exposed through `FirebirdPreparedStatement.Bind(index, value As DateTime)` |
+| BLOB binding | `isc_create_blob2`, `isc_put_segment` | `[x]` | Exposed through `BindTextBlob` and `BindBinaryBlob` |
 | Text BLOB read | `isc_open_blob2`, `isc_get_segment` with transliteration BPB | `[x]` | Implemented internally |
 | Binary BLOB read | `isc_open_blob2`, `isc_get_segment` | `[x]` | Implemented internally |
 | Array API | `isc_array_*` | `[ ]` | Not implemented |
 | Database info API | `isc_database_info` | `[x]` | Exposed to Xojo through typed database info helper methods |
-| Transaction info API | `isc_transaction_info` | `[-]` | Phase 03 exposes typed inspection helpers for the active transaction; TPB/isolation configuration is still deferred |
+| Transaction info API | `isc_transaction_info` | `[x]` | Phase 03 added inspection helpers and Phase 04 added explicit TPB-backed transaction controls |
 | Request API / BLR style APIs | low-level request functions | `[ ]` | Not implemented and probably out of scope for Xojo v1 |
 | Event API | `isc_event_*` | `[ ]` | Not implemented |
 | Security/user management core API | security-related APIs | `[ ]` | Not implemented |
@@ -254,6 +254,7 @@ The checklist below compares the current Xojo plugin to that surface.
 - row iteration and column access
 - transaction begin, commit, rollback
 - transaction info helpers for active transaction inspection
+- explicit TPB-backed transaction options for isolation, read-only/read-write, and lock timeout
 - schema helpers: tables, columns, indexes
 - database info helpers backed by `isc_database_info`
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
@@ -291,6 +292,7 @@ This is the intended feature set for the Xojo plugin within the current scope.
 - rowset iteration and column access
 - transaction begin, commit, rollback
 - transaction info helpers for active transaction inspection
+- explicit transaction options backed by Firebird TPB
 - schema helpers for tables, columns, and indexes
 - database info helpers backed by `isc_database_info`
 
@@ -498,7 +500,8 @@ Status: completed on April 6, 2026.
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
 | database info helpers | Jaybird, .NET | Complete in Phase 01 | Done |
-| transaction info helpers | Jaybird, .NET | Complete in Phase 03 as inspection helpers | Done |
+| transaction info helpers | Jaybird, .NET | Complete in Phase 03 | Done |
+| explicit transaction controls | Jaybird, .NET | Complete in Phase 04 with typed TPB-backed options | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Missing | Medium |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
@@ -514,9 +517,9 @@ Status: completed on April 6, 2026.
 
 ### Do next
 
-- design richer transaction controls using Jaybird as the behavioral reference
 - decide whether generated-key helpers should remain SQL-only through `RETURNING` or gain explicit convenience APIs
 - evaluate Services API scope for backup, restore, and user-management workflows
+- decide whether savepoints belong in the public Xojo surface or should stay out of scope
 
 ### Defer until after the above
 

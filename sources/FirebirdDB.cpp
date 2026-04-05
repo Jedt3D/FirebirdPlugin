@@ -1,10 +1,13 @@
 // FirebirdDB.cpp — Implementation of thin C++ wrapper over libfbclient
 
 #include "FirebirdDB.h"
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <iomanip>
-#include <sstream>
 #include <cmath>
+#include <limits>
+#include <sstream>
 
 extern "C" {
 #include <firebird/fb_c_api.h>
@@ -401,6 +404,86 @@ bool ParseTimestampTzValue(const std::string &text, ISC_TIMESTAMP_TZ &out) {
     return status.ok();
 }
 
+std::string NormalizeTextToken(const std::string &text) {
+    std::string normalized;
+    normalized.reserve(text.size());
+
+    bool inWhitespace = false;
+    for (unsigned char ch : text) {
+        if (std::isspace(ch)) {
+            if (!normalized.empty()) inWhitespace = true;
+            continue;
+        }
+
+        if (inWhitespace) {
+            normalized.push_back(' ');
+            inWhitespace = false;
+        }
+
+        normalized.push_back((char)std::tolower(ch));
+    }
+
+    return normalized;
+}
+
+struct TransactionOptionMapping {
+    std::string normalizedIsolation;
+    std::vector<unsigned char> isolationItems;
+};
+
+bool ParseTransactionIsolation(const std::string &text, TransactionOptionMapping &out) {
+    const std::string normalized = NormalizeTextToken(text);
+    if (normalized.empty()) return false;
+
+    if (normalized == "consistency") {
+        out.normalizedIsolation = "consistency";
+        out.isolationItems = { isc_tpb_consistency };
+        return true;
+    }
+
+    if (normalized == "concurrency" || normalized == "snapshot") {
+        out.normalizedIsolation = "concurrency";
+        out.isolationItems = { isc_tpb_concurrency };
+        return true;
+    }
+
+    if (normalized == "read committed") {
+        out.normalizedIsolation = "read committed";
+        out.isolationItems = { isc_tpb_read_committed };
+        return true;
+    }
+
+    if (normalized == "read committed record version") {
+        out.normalizedIsolation = "read committed record version";
+        out.isolationItems = { isc_tpb_read_committed, isc_tpb_rec_version };
+        return true;
+    }
+
+    if (normalized == "read committed no record version") {
+        out.normalizedIsolation = "read committed no record version";
+        out.isolationItems = { isc_tpb_read_committed, isc_tpb_no_rec_version };
+        return true;
+    }
+
+#ifdef isc_tpb_read_consistency
+    if (normalized == "read committed read consistency") {
+        out.normalizedIsolation = "read committed read consistency";
+        out.isolationItems = { isc_tpb_read_committed, isc_tpb_read_consistency };
+        return true;
+    }
+#endif
+
+    return false;
+}
+
+void AppendInt32LE(std::vector<unsigned char> &bytes, long value) {
+    bytes.push_back(4);
+    bytes.push_back((unsigned char)(value & 0xFF));
+    bytes.push_back((unsigned char)((value >> 8) & 0xFF));
+    bytes.push_back((unsigned char)((value >> 16) & 0xFF));
+    bytes.push_back((unsigned char)((value >> 24) & 0xFF));
+}
+
 } // namespace
 
 // ============================================================================
@@ -494,6 +577,58 @@ bool FBDatabase::beginTransaction() {
 
     mTrans = 0;
     if (isc_start_transaction(mStatus, &mTrans, 1, &mDB, 0, nullptr)) {
+        captureError();
+        return false;
+    }
+    return true;
+}
+
+bool FBDatabase::beginTransactionWithOptions(const std::string &isolation, bool readOnly, long lockTimeout) {
+    if (!mConnected) {
+        setError(-200002, "Database is not connected");
+        return false;
+    }
+    if (mTrans) {
+        setError(-200001, "A transaction is already active");
+        return false;
+    }
+
+    TransactionOptionMapping mapping;
+    if (!ParseTransactionIsolation(isolation, mapping)) {
+        setError(-200003, "Unsupported transaction isolation: " + isolation);
+        return false;
+    }
+
+    if (lockTimeout < -1) {
+        setError(-200004, "Lock timeout must be -1, 0, or a positive number of seconds");
+        return false;
+    }
+
+    if (lockTimeout > std::numeric_limits<int32_t>::max()) {
+        setError(-200005, "Lock timeout exceeds Firebird TPB range");
+        return false;
+    }
+
+    clearError();
+
+    std::vector<unsigned char> tpb;
+    tpb.push_back(isc_tpb_version3);
+    tpb.insert(tpb.end(), mapping.isolationItems.begin(), mapping.isolationItems.end());
+    tpb.push_back(readOnly ? isc_tpb_read : isc_tpb_write);
+
+    if (lockTimeout == -1) {
+        tpb.push_back(isc_tpb_wait);
+    } else if (lockTimeout == 0) {
+        tpb.push_back(isc_tpb_nowait);
+    } else {
+        tpb.push_back(isc_tpb_wait);
+        tpb.push_back(isc_tpb_lock_timeout);
+        AppendInt32LE(tpb, lockTimeout);
+    }
+
+    mTrans = 0;
+    if (isc_start_transaction(mStatus, &mTrans, 1, &mDB, (unsigned short)tpb.size(),
+                              reinterpret_cast<char *>(tpb.data()))) {
         captureError();
         return false;
     }
@@ -857,6 +992,12 @@ void FBDatabase::clearError() {
     mErrorCode = 0;
     mErrorMsg.clear();
     memset(mStatus, 0, sizeof(mStatus));
+}
+
+void FBDatabase::setError(long code, const std::string &message) {
+    clearError();
+    mErrorCode = code;
+    mErrorMsg = message;
 }
 
 // Schema SQL — queries Firebird system tables

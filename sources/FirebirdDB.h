@@ -131,6 +131,7 @@ public:
 
     // Transactions
     bool beginTransaction();
+    bool beginTransactionWithOptions(const std::string &isolation, bool readOnly, long lockTimeout);
     bool commit();
     bool rollback();
     bool hasActiveTransaction() const { return mTrans != 0; }
@@ -181,6 +182,7 @@ private:
     const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();
+    void setError(long code, const std::string &message);
 
     isc_db_handle   mDB = 0;
     isc_tr_handle   mTrans = 0;

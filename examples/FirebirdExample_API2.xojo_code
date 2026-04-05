@@ -326,6 +326,23 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 11b: Explicit Transaction Options
+// ---------------------------------------------------------------------------
+
+Sub TransactionOptionsExample(db As FirebirdDatabase)
+  Var started As Boolean = db.BeginTransactionWithOptions("read committed read consistency", True, 0)
+  If started Then
+    System.DebugLog("TransactionIsolation: " + db.TransactionIsolation)
+    System.DebugLog("TransactionAccessMode: " + db.TransactionAccessMode)
+    System.DebugLog("TransactionLockTimeout: " + db.TransactionLockTimeout.ToString)
+    db.RollbackTransaction
+  Else
+    System.DebugLog("BeginTransactionWithOptions error: " + db.ErrorMessage)
+  End If
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 12: Date/Time Handling
 // ---------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
+- Explicit transaction options: `BeginTransactionWithOptions`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -99,6 +100,37 @@ End If
 
 db.CommitTransaction
 ```
+
+## Explicit Transaction Options
+
+For Firebird 4/5/6, `FirebirdDatabase` can also start an explicit transaction with a controlled TPB:
+
+```vb
+If db.BeginTransactionWithOptions("read committed read consistency", True, 0) Then
+  System.DebugLog("Isolation: " + db.TransactionIsolation)
+  System.DebugLog("AccessMode: " + db.TransactionAccessMode)
+  System.DebugLog("LockTimeout: " + db.TransactionLockTimeout.ToString)
+  db.RollbackTransaction
+Else
+  System.DebugLog("BeginTransactionWithOptions failed: " + db.ErrorMessage)
+End If
+```
+
+Supported isolation strings:
+
+- `consistency`
+- `concurrency`
+- `snapshot`
+- `read committed`
+- `read committed record version`
+- `read committed no record version`
+- `read committed read consistency`
+
+Lock-timeout semantics:
+
+- `-1` = wait indefinitely
+- `0` = `NO WAIT`
+- `> 0` = wait for that many seconds
 
 ## PreparedStatement Type Binds
 

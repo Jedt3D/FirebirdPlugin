@@ -168,6 +168,7 @@ End
 		  TestTransaction
 		  TestTransactionRollback
 		  TestTransactionInfo
+		  TestTransactionOptions
 		  TestPreparedStatementSelect
 		  TestPreparedStatementExecute
 		  TestPreparedStatementBindTypes
@@ -1732,6 +1733,100 @@ End
 		    End If
 		  Catch ex As DatabaseException
 		    LogFail "Table schema", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestTransactionOptions()
+		  Log "-- Test: Transaction options --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    Var started As Boolean = db.BeginTransactionWithOptions("read committed read consistency", True, 0)
+		    If started Then
+		      LogPass "BeginTransactionWithOptions read-only"
+		    Else
+		      LogFail "BeginTransactionWithOptions read-only", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.TransactionIsolation = "read committed read consistency" Then
+		      LogPass "TransactionIsolation explicit read consistency"
+		    Else
+		      LogFail "TransactionIsolation explicit read consistency", db.TransactionIsolation
+		    End If
+		    
+		    If db.TransactionAccessMode = "read only" Then
+		      LogPass "TransactionAccessMode explicit read only"
+		    Else
+		      LogFail "TransactionAccessMode explicit read only", db.TransactionAccessMode
+		    End If
+		    
+		    If db.TransactionLockTimeout = 0 Then
+		      LogPass "TransactionLockTimeout explicit nowait"
+		    Else
+		      LogFail "TransactionLockTimeout explicit nowait", db.TransactionLockTimeout.ToString
+		    End If
+		    
+		    Try
+		      // Firebird should raise -817 here. In the debugger this can appear
+		      // as a handled DatabaseException before execution continues to Catch.
+		      db.ExecuteSQL("INSERT INTO genres (Name) VALUES ('TxnReadOnlyShouldFail')")
+		      LogFail "Read-only transaction rejects write", "Write unexpectedly succeeded"
+		    Catch ex As DatabaseException
+		      LogPass "Read-only transaction rejects write"
+		    End Try
+		    
+		    db.RollbackTransaction
+		    
+		    started = db.BeginTransactionWithOptions("concurrency", False, 5)
+		    If started Then
+		      LogPass "BeginTransactionWithOptions read-write"
+		    Else
+		      LogFail "BeginTransactionWithOptions read-write", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.TransactionIsolation = "concurrency" Then
+		      LogPass "TransactionIsolation explicit concurrency"
+		    Else
+		      LogFail "TransactionIsolation explicit concurrency", db.TransactionIsolation
+		    End If
+		    
+		    If db.TransactionAccessMode = "read write" Then
+		      LogPass "TransactionAccessMode explicit read write"
+		    Else
+		      LogFail "TransactionAccessMode explicit read write", db.TransactionAccessMode
+		    End If
+		    
+		    If db.TransactionLockTimeout = 5 Then
+		      LogPass "TransactionLockTimeout explicit wait"
+		    Else
+		      LogFail "TransactionLockTimeout explicit wait", db.TransactionLockTimeout.ToString
+		    End If
+		    
+		    db.CommitTransaction
+		    
+		    started = db.BeginTransactionWithOptions("invalid isolation", False, -1)
+		    If started = False And db.HasActiveTransaction = False And db.ErrorMessage <> "" Then
+		      LogPass "BeginTransactionWithOptions invalid isolation rejected"
+		    Else
+		      LogFail "BeginTransactionWithOptions invalid isolation rejected", db.ErrorMessage
+		    End If
+		    
+		  Catch ex As DatabaseException
+		    LogFail "Transaction options", ex.Message
+		    Try
+		      db.RollbackTransaction
+		    Catch rollEx As DatabaseException
+		    End Try
 		  End Try
 		  
 		  db.Close
