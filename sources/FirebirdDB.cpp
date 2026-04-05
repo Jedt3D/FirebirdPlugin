@@ -1,8 +1,407 @@
 // FirebirdDB.cpp — Implementation of thin C++ wrapper over libfbclient
 
 #include "FirebirdDB.h"
+#include <array>
+#include <iomanip>
 #include <sstream>
 #include <cmath>
+
+extern "C" {
+#include <firebird/fb_c_api.h>
+}
+
+namespace {
+
+struct FirebirdUtilityInterfaces {
+    IMaster *master = nullptr;
+    IUtil *util = nullptr;
+    IDecFloat16 *dec16 = nullptr;
+    IDecFloat34 *dec34 = nullptr;
+    IInt128 *int128 = nullptr;
+
+    FirebirdUtilityInterfaces() {
+        master = fb_get_master_interface();
+        if (!master) return;
+
+        util = IMaster_getUtilInterface(master);
+        if (!util) return;
+
+        IStatus *status = IMaster_getStatus(master);
+        if (!status) return;
+
+        IStatus_init(status);
+        dec16 = IUtil_getDecFloat16(util, status);
+        IStatus_init(status);
+        dec34 = IUtil_getDecFloat34(util, status);
+        IStatus_init(status);
+        int128 = IUtil_getInt128(util, status);
+        IStatus_dispose(status);
+    }
+};
+
+FirebirdUtilityInterfaces &GetFirebirdUtilities() {
+    static FirebirdUtilityInterfaces utilities;
+    return utilities;
+}
+
+class FirebirdStatusScope {
+public:
+    FirebirdStatusScope() {
+        auto &utilities = GetFirebirdUtilities();
+        if (utilities.master) {
+            mStatus = IMaster_getStatus(utilities.master);
+            if (mStatus) IStatus_init(mStatus);
+        }
+    }
+
+    ~FirebirdStatusScope() {
+        if (mStatus) IStatus_dispose(mStatus);
+    }
+
+    IStatus *get() const { return mStatus; }
+
+    bool ok() const {
+        return mStatus && !(IStatus_getState(mStatus) & IStatus_STATE_ERRORS);
+    }
+
+private:
+    IStatus *mStatus = nullptr;
+};
+
+bool ParseUnsignedComponent(const std::string &text, unsigned maxValue, unsigned &out) {
+    if (text.empty()) return false;
+    char *endPtr = nullptr;
+    unsigned long value = strtoul(text.c_str(), &endPtr, 10);
+    if (!endPtr || *endPtr != '\0' || value > maxValue) return false;
+    out = (unsigned)value;
+    return true;
+}
+
+bool ParseFractionComponent(const std::string &text, unsigned &out) {
+    if (text.empty()) {
+        out = 0;
+        return true;
+    }
+    if (text.size() > 4) return false;
+
+    std::string padded = text;
+    while (padded.size() < 4) padded.push_back('0');
+    return ParseUnsignedComponent(padded, 9999, out);
+}
+
+bool ParseTimeLiteral(const std::string &text,
+                      unsigned &hour,
+                      unsigned &minute,
+                      unsigned &second,
+                      unsigned &fractions)
+{
+    size_t firstColon = text.find(':');
+    size_t secondColon = text.find(':', firstColon == std::string::npos ? firstColon : firstColon + 1);
+    if (firstColon == std::string::npos || secondColon == std::string::npos) return false;
+
+    std::string hourPart = text.substr(0, firstColon);
+    std::string minutePart = text.substr(firstColon + 1, secondColon - firstColon - 1);
+    std::string secondPart = text.substr(secondColon + 1);
+
+    size_t dot = secondPart.find('.');
+    std::string secondOnly = dot == std::string::npos ? secondPart : secondPart.substr(0, dot);
+    std::string fractionPart = dot == std::string::npos ? "" : secondPart.substr(dot + 1);
+
+    return ParseUnsignedComponent(hourPart, 23, hour) &&
+           ParseUnsignedComponent(minutePart, 59, minute) &&
+           ParseUnsignedComponent(secondOnly, 59, second) &&
+           ParseFractionComponent(fractionPart, fractions);
+}
+
+bool ParseDateLiteral(const std::string &text, unsigned &year, unsigned &month, unsigned &day) {
+    size_t firstDash = text.find('-');
+    size_t secondDash = text.find('-', firstDash == std::string::npos ? firstDash : firstDash + 1);
+    if (firstDash == std::string::npos || secondDash == std::string::npos) return false;
+
+    std::string yearPart = text.substr(0, firstDash);
+    std::string monthPart = text.substr(firstDash + 1, secondDash - firstDash - 1);
+    std::string dayPart = text.substr(secondDash + 1);
+
+    return ParseUnsignedComponent(yearPart, 9999, year) &&
+           ParseUnsignedComponent(monthPart, 12, month) &&
+           ParseUnsignedComponent(dayPart, 31, day);
+}
+
+bool FormatInt128Value(const FB_I128 &value, short scale, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.int128) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IInt128_STRING_SIZE + 1> buffer = {};
+    IInt128_toString(utilities.int128, status.get(), &value, scale, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseInt128Value(const std::string &text, short scale, FB_I128 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.int128) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IInt128_fromString(utilities.int128, status.get(), scale, text.c_str(), &out);
+    return status.ok();
+}
+
+bool FormatDecFloat16Value(const FB_DEC16 &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec16) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IDecFloat16_STRING_SIZE + 1> buffer = {};
+    IDecFloat16_toString(utilities.dec16, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseDecFloat16Value(const std::string &text, FB_DEC16 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec16) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IDecFloat16_fromString(utilities.dec16, status.get(), text.c_str(), &out);
+    return status.ok();
+}
+
+bool FormatDecFloat34Value(const FB_DEC34 &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec34) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IDecFloat34_STRING_SIZE + 1> buffer = {};
+    IDecFloat34_toString(utilities.dec34, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseDecFloat34Value(const std::string &text, FB_DEC34 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec34) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IDecFloat34_fromString(utilities.dec34, status.get(), text.c_str(), &out);
+    return status.ok();
+}
+
+std::string FormatTimeZoneText(unsigned hour,
+                               unsigned minute,
+                               unsigned second,
+                               unsigned fractions,
+                               const char *timeZone)
+{
+    std::ostringstream out;
+    out << std::setfill('0')
+        << std::setw(2) << hour << ':'
+        << std::setw(2) << minute << ':'
+        << std::setw(2) << second
+        << '.'
+        << std::setw(4) << fractions;
+
+    if (timeZone && *timeZone) out << ' ' << timeZone;
+    return out.str();
+}
+
+std::string FormatTimestampZoneText(unsigned year,
+                                    unsigned month,
+                                    unsigned day,
+                                    unsigned hour,
+                                    unsigned minute,
+                                    unsigned second,
+                                    unsigned fractions,
+                                    const char *timeZone)
+{
+    std::ostringstream out;
+    out << std::setfill('0')
+        << std::setw(4) << year << '-'
+        << std::setw(2) << month << '-'
+        << std::setw(2) << day << ' '
+        << std::setw(2) << hour << ':'
+        << std::setw(2) << minute << ':'
+        << std::setw(2) << second
+        << '.'
+        << std::setw(4) << fractions;
+
+    if (timeZone && *timeZone) out << ' ' << timeZone;
+    return out.str();
+}
+
+bool FormatTimeTzValue(const ISC_TIME_TZ &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeTz(utilities.util, status.get(), &value,
+                       &hour, &minute, &second, &fractions,
+                       (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimeZoneText(hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool FormatTimeTzExValue(const ISC_TIME_TZ_EX &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeTzEx(utilities.util, status.get(), &value,
+                         &hour, &minute, &second, &fractions,
+                         (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimeZoneText(hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool ParseTimeTzValue(const std::string &text, ISC_TIME_TZ &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    size_t split = text.find_last_of(' ');
+    if (split == std::string::npos) return false;
+
+    std::string timePart = text.substr(0, split);
+    std::string zonePart = text.substr(split + 1);
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    if (!ParseTimeLiteral(timePart, hour, minute, second, fractions)) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IUtil_encodeTimeTz(utilities.util, status.get(), &out, hour, minute, second, fractions, zonePart.c_str());
+    return status.ok();
+}
+
+bool FormatTimestampTzValue(const ISC_TIMESTAMP_TZ &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeStampTz(utilities.util, status.get(), &value,
+                            &year, &month, &day, &hour, &minute, &second, &fractions,
+                            (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimestampZoneText(year, month, day, hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool FormatTimestampTzExValue(const ISC_TIMESTAMP_TZ_EX &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeStampTzEx(utilities.util, status.get(), &value,
+                              &year, &month, &day, &hour, &minute, &second, &fractions,
+                              (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimestampZoneText(year, month, day, hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool ParseTimestampTzValue(const std::string &text, ISC_TIMESTAMP_TZ &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    size_t split = text.find_last_of(' ');
+    if (split == std::string::npos) return false;
+
+    std::string dateTimePart = text.substr(0, split);
+    std::string zonePart = text.substr(split + 1);
+
+    size_t separator = dateTimePart.find('T');
+    if (separator == std::string::npos) separator = dateTimePart.find(' ');
+    if (separator == std::string::npos) return false;
+
+    std::string datePart = dateTimePart.substr(0, separator);
+    std::string timePart = dateTimePart.substr(separator + 1);
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+
+    if (!ParseDateLiteral(datePart, year, month, day)) return false;
+    if (!ParseTimeLiteral(timePart, hour, minute, second, fractions)) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IUtil_encodeTimeStampTz(utilities.util, status.get(), &out,
+                            year, month, day, hour, minute, second, fractions,
+                            zonePart.c_str());
+    return status.ok();
+}
+
+} // namespace
 
 // ============================================================================
 // FBDatabase
@@ -424,12 +823,27 @@ void FBStatement::allocateBuffers(XSQLDA *sqlda) {
             case SQL_INT64:
                 var->sqldata = (char *)calloc(1, sizeof(ISC_INT64));
                 break;
+#ifdef SQL_INT128
+            case SQL_INT128:
+                var->sqldata = (char *)calloc(1, sizeof(FB_I128));
+                break;
+#endif
             case SQL_FLOAT:
                 var->sqldata = (char *)calloc(1, sizeof(float));
                 break;
             case SQL_DOUBLE:
                 var->sqldata = (char *)calloc(1, sizeof(double));
                 break;
+#ifdef SQL_DEC16
+            case SQL_DEC16:
+                var->sqldata = (char *)calloc(1, sizeof(FB_DEC16));
+                break;
+#endif
+#ifdef SQL_DEC34
+            case SQL_DEC34:
+                var->sqldata = (char *)calloc(1, sizeof(FB_DEC34));
+                break;
+#endif
             case SQL_TIMESTAMP:
                 var->sqldata = (char *)calloc(1, sizeof(ISC_TIMESTAMP));
                 break;
@@ -439,6 +853,26 @@ void FBStatement::allocateBuffers(XSQLDA *sqlda) {
             case SQL_TYPE_TIME:
                 var->sqldata = (char *)calloc(1, sizeof(ISC_TIME));
                 break;
+#ifdef SQL_TIME_TZ
+            case SQL_TIME_TZ:
+                var->sqldata = (char *)calloc(1, sizeof(ISC_TIME_TZ));
+                break;
+#endif
+#ifdef SQL_TIME_TZ_EX
+            case SQL_TIME_TZ_EX:
+                var->sqldata = (char *)calloc(1, sizeof(ISC_TIME_TZ_EX));
+                break;
+#endif
+#ifdef SQL_TIMESTAMP_TZ
+            case SQL_TIMESTAMP_TZ:
+                var->sqldata = (char *)calloc(1, sizeof(ISC_TIMESTAMP_TZ));
+                break;
+#endif
+#ifdef SQL_TIMESTAMP_TZ_EX
+            case SQL_TIMESTAMP_TZ_EX:
+                var->sqldata = (char *)calloc(1, sizeof(ISC_TIMESTAMP_TZ_EX));
+                break;
+#endif
             case SQL_BLOB:
                 var->sqldata = (char *)calloc(1, sizeof(ISC_QUAD));
                 break;
@@ -730,12 +1164,36 @@ FBValue FBStatement::columnValue(int index) const {
             }
             break;
         }
+#ifdef SQL_INT128
+        case SQL_INT128: {
+            if (!FormatInt128Value(*(FB_I128 *)var->sqldata, var->sqlscale, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(FB_I128));
+            }
+            break;
+        }
+#endif
         case SQL_FLOAT:
             val.dblVal = *(float *)var->sqldata;
             break;
         case SQL_DOUBLE:
             val.dblVal = *(double *)var->sqldata;
             break;
+#ifdef SQL_DEC16
+        case SQL_DEC16: {
+            if (!FormatDecFloat16Value(*(FB_DEC16 *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(FB_DEC16));
+            }
+            break;
+        }
+#endif
+#ifdef SQL_DEC34
+        case SQL_DEC34: {
+            if (!FormatDecFloat34Value(*(FB_DEC34 *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(FB_DEC34));
+            }
+            break;
+        }
+#endif
         case SQL_TYPE_DATE:
             val.dateVal = *(ISC_DATE *)var->sqldata;
             break;
@@ -745,6 +1203,38 @@ FBValue FBStatement::columnValue(int index) const {
         case SQL_TIMESTAMP:
             val.tsVal = *(ISC_TIMESTAMP *)var->sqldata;
             break;
+#ifdef SQL_TIME_TZ
+        case SQL_TIME_TZ: {
+            if (!FormatTimeTzValue(*(ISC_TIME_TZ *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(ISC_TIME_TZ));
+            }
+            break;
+        }
+#endif
+#ifdef SQL_TIME_TZ_EX
+        case SQL_TIME_TZ_EX: {
+            if (!FormatTimeTzExValue(*(ISC_TIME_TZ_EX *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(ISC_TIME_TZ_EX));
+            }
+            break;
+        }
+#endif
+#ifdef SQL_TIMESTAMP_TZ
+        case SQL_TIMESTAMP_TZ: {
+            if (!FormatTimestampTzValue(*(ISC_TIMESTAMP_TZ *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(ISC_TIMESTAMP_TZ));
+            }
+            break;
+        }
+#endif
+#ifdef SQL_TIMESTAMP_TZ_EX
+        case SQL_TIMESTAMP_TZ_EX: {
+            if (!FormatTimestampTzExValue(*(ISC_TIMESTAMP_TZ_EX *)var->sqldata, val.strVal)) {
+                val.strVal.assign(var->sqldata, sizeof(ISC_TIMESTAMP_TZ_EX));
+            }
+            break;
+        }
+#endif
         case SQL_BLOB:
             val.blobId = *(ISC_QUAD *)var->sqldata;
             break;
@@ -777,6 +1267,71 @@ void FBStatement::bindString(int index, const std::string &val) {
     XSQLVAR *var = &mInSqlda->sqlvar[index];
 
     short dtype = var->sqltype & ~1;
+#ifdef SQL_INT128
+    if (dtype == SQL_INT128) {
+        FB_I128 parsed = {};
+        if (ParseInt128Value(val, var->sqlscale, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(FB_I128));
+            memcpy(var->sqldata, &parsed, sizeof(FB_I128));
+            var->sqltype = SQL_INT128 | (var->sqltype & 1);
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
+#ifdef SQL_DEC16
+    if (dtype == SQL_DEC16) {
+        FB_DEC16 parsed = {};
+        if (ParseDecFloat16Value(val, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(FB_DEC16));
+            memcpy(var->sqldata, &parsed, sizeof(FB_DEC16));
+            var->sqltype = SQL_DEC16 | (var->sqltype & 1);
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
+#ifdef SQL_DEC34
+    if (dtype == SQL_DEC34) {
+        FB_DEC34 parsed = {};
+        if (ParseDecFloat34Value(val, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(FB_DEC34));
+            memcpy(var->sqldata, &parsed, sizeof(FB_DEC34));
+            var->sqltype = SQL_DEC34 | (var->sqltype & 1);
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
+#ifdef SQL_TIME_TZ
+    if (dtype == SQL_TIME_TZ) {
+        ISC_TIME_TZ parsed = {};
+        if (ParseTimeTzValue(val, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(ISC_TIME_TZ));
+            memcpy(var->sqldata, &parsed, sizeof(ISC_TIME_TZ));
+            var->sqltype = SQL_TIME_TZ | (var->sqltype & 1);
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
+#ifdef SQL_TIMESTAMP_TZ
+    if (dtype == SQL_TIMESTAMP_TZ) {
+        ISC_TIMESTAMP_TZ parsed = {};
+        if (ParseTimestampTzValue(val, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(ISC_TIMESTAMP_TZ));
+            memcpy(var->sqldata, &parsed, sizeof(ISC_TIMESTAMP_TZ));
+            var->sqltype = SQL_TIMESTAMP_TZ | (var->sqltype & 1);
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
 
     // Reallocate buffer for the string
     if (dtype == SQL_VARYING || dtype == SQL_TEXT) {
@@ -821,6 +1376,22 @@ void FBStatement::bindInt(int index, int64_t val) {
         case SQL_INT64:
             *(ISC_INT64 *)var->sqldata = (ISC_INT64)val;
             break;
+#ifdef SQL_INT128
+        case SQL_INT128: {
+            FB_I128 parsed = {};
+            if (ParseInt128Value(std::to_string(val), var->sqlscale, parsed)) {
+                if (var->sqldata) free(var->sqldata);
+                var->sqldata = (char *)calloc(1, sizeof(FB_I128));
+                memcpy(var->sqldata, &parsed, sizeof(FB_I128));
+                break;
+            }
+            var->sqltype = SQL_INT64 | (var->sqltype & 1);
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(ISC_INT64));
+            *(ISC_INT64 *)var->sqldata = (ISC_INT64)val;
+            break;
+        }
+#endif
         default:
             // Force INT64
             var->sqltype = SQL_INT64 | (var->sqltype & 1);
@@ -836,6 +1407,23 @@ void FBStatement::bindDouble(int index, double val) {
     if (!mInSqlda || index >= mInSqlda->sqld) return;
     XSQLVAR *var = &mInSqlda->sqlvar[index];
     short dtype = var->sqltype & ~1;
+
+#ifdef SQL_INT128
+    if (dtype == SQL_INT128) {
+        std::ostringstream scaled;
+        int digits = var->sqlscale < 0 ? -var->sqlscale : 0;
+        scaled << std::fixed << std::setprecision(digits) << val;
+
+        FB_I128 parsed = {};
+        if (ParseInt128Value(scaled.str(), var->sqlscale, parsed)) {
+            if (var->sqldata) free(var->sqldata);
+            var->sqldata = (char *)calloc(1, sizeof(FB_I128));
+            memcpy(var->sqldata, &parsed, sizeof(FB_I128));
+            if (var->sqlind) *var->sqlind = 0;
+            return;
+        }
+    }
+#endif
 
     if (dtype == SQL_FLOAT) {
         *(float *)var->sqldata = (float)val;

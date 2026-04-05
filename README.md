@@ -12,10 +12,12 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
+- Firebird 4/5/6 modern types exposed safely through string semantics:
+  `INT128`, `DECFLOAT(16/34)`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE`
 - Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
 - Schema introspection: `TableSchema`, `FieldSchema`, `IndexSchema`
 - Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`
-- Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN
+- Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN, plus Firebird 4/5/6 modern types via `StringValue`
 - Supports **remote** (client/server) and **embedded** (direct file) connections
 - Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64), **Linux** (x64)
 
@@ -54,7 +56,7 @@ Catch err As DatabaseException
 End Try
 ```
 
-More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOBs, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
+More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOBs, Firebird 4/5/6 modern types, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
 
 ## Firebird-Specific Metadata
 
@@ -96,6 +98,41 @@ ps.BindBinaryBlob(4, payload)
 ps.ExecuteSQL
 ```
 
+## Firebird 4/5/6 Modern Types
+
+For Firebird types that do not map cleanly to native Xojo scalar types, the plugin uses a string-first boundary:
+
+- bind with `String`
+- read back with `StringValue`
+
+This applies to:
+
+- `INT128`
+- `DECFLOAT(16)`
+- `DECFLOAT(34)`
+- `TIME WITH TIME ZONE`
+- `TIMESTAMP WITH TIME ZONE`
+
+```vb
+Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
+  db.Prepare("INSERT INTO modern_values (v_int128, v_dec34, v_time_tz, v_ts_tz) VALUES (?, ?, ?, ?)"))
+
+ps.Bind(0, "12345678901234567890123456789012345")
+ps.Bind(1, "12345678901234567890.12345678901234")
+ps.Bind(2, "10:11:12.3456 UTC")
+ps.Bind(3, "2026-04-06 13:14:15.3456 UTC")
+ps.ExecuteSQL
+
+Var rs As RowSet = db.SelectSQL("SELECT v_int128, v_dec34, v_time_tz, v_ts_tz FROM modern_values")
+If Not rs.AfterLastRow Then
+  System.DebugLog(rs.Column("v_int128").StringValue)
+  System.DebugLog(rs.Column("v_dec34").StringValue)
+  System.DebugLog(rs.Column("v_time_tz").StringValue)
+  System.DebugLog(rs.Column("v_ts_tz").StringValue)
+End If
+rs.Close
+```
+
 ## Project Structure
 
 ```
@@ -109,7 +146,7 @@ FirebirdPlugin/
 │   ├── Includes/              # Xojo Plugin SDK headers (rb_plugin.h, etc.)
 │   └── GlueCode/             # PluginMain.cpp, PluginMainCocoa.mm
 ├── examples/
-│   ├── FirebirdExample_API2.xojo_code   # 17 usage examples
+│   ├── FirebirdExample_API2.xojo_code   # 18 usage examples
 │   └── QuickReference.xojo_code         # Side-by-side comparison with MySQL/PostgreSQL
 ├── .github/workflows/
 │   └── build.yml              # GitHub Actions CI for all platforms

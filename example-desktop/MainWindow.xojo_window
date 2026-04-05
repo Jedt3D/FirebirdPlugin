@@ -175,6 +175,10 @@ End
 		  TestPreparedStatementBindNull
 		  TestNativeBooleanRoundTrip
 		  TestScaledNumericRoundTrip
+		  TestInt128RoundTrip
+		  TestDecFloatRoundTrip
+		  TestTimeWithTimeZoneRoundTrip
+		  TestTimestampWithTimeZoneRoundTrip
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -381,6 +385,51 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Sub TestDecFloatRoundTrip()
+		  Log "-- Test: DECFLOAT round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_decfloat (id INTEGER NOT NULL, v16 DECFLOAT(16), v34 DECFLOAT(34))")
+		    
+		    db.ExecuteSQL("INSERT INTO test_decfloat (id, v16, v34) VALUES (1, ?, ?)", "12345.6789", "12345678901234567890.12345678901234")
+		    LogPass "Bind DECFLOAT via ExecuteSQL params"
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT v16, CAST(v16 AS VARCHAR(100)) AS v16_text, v34, CAST(v34 AS VARCHAR(100)) AS v34_text FROM test_decfloat WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var actual16 As String = rs.Column("v16").StringValue
+		      Var expected16 As String = rs.Column("v16_text").StringValue
+		      Var actual34 As String = rs.Column("v34").StringValue
+		      Var expected34 As String = rs.Column("v34_text").StringValue
+		      
+		      If actual16 = expected16 Then
+		        LogPass "DECFLOAT(16) readback"
+		      Else
+		        LogFail "DECFLOAT(16) readback", actual16 + " <> " + expected16
+		      End If
+		      
+		      If actual34 = expected34 Then
+		        LogPass "DECFLOAT(34) readback"
+		      Else
+		        LogFail "DECFLOAT(34) readback", actual34 + " <> " + expected34
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "DECFLOAT readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "DECFLOAT round-trip", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "DECFLOAT round-trip", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Sub TestEmptyResultSet()
 		  Log "-- Test: Empty result set --"
 		  
@@ -520,6 +569,58 @@ End
 		    End If
 		  Catch ex As DatabaseException
 		    LogFail "Field schema", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestInt128RoundTrip()
+		  Log "-- Test: INT128 round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_int128 (id INTEGER NOT NULL, v_int128 INT128, v_num38 NUMERIC(38,4))")
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_int128 (id, v_int128, v_num38) VALUES (1, ?, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, "12345678901234567890123456789012345")
+		      ps.Bind(1, "987654321098765432109876543210.4321")
+		      ps.ExecuteSQL
+		      LogPass "Bind INT128 via prepared String"
+		    Else
+		      LogFail "Bind INT128 via prepared String", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT v_int128, CAST(v_int128 AS VARCHAR(100)) AS v_int128_text, v_num38, CAST(v_num38 AS VARCHAR(100)) AS v_num38_text FROM test_int128 WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var actualInt128 As String = rs.Column("v_int128").StringValue
+		      Var expectedInt128 As String = rs.Column("v_int128_text").StringValue
+		      Var actualNum38 As String = rs.Column("v_num38").StringValue
+		      Var expectedNum38 As String = rs.Column("v_num38_text").StringValue
+		      
+		      If actualInt128 = expectedInt128 Then
+		        LogPass "INT128 readback"
+		      Else
+		        LogFail "INT128 readback", actualInt128 + " <> " + expectedInt128
+		      End If
+		      
+		      If actualNum38 = expectedNum38 Then
+		        LogPass "NUMERIC(38,4) readback"
+		      Else
+		        LogFail "NUMERIC(38,4) readback", actualNum38 + " <> " + expectedNum38
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "INT128 readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "INT128 round-trip", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "INT128 round-trip", ex.Message
 		  End Try
 		  
 		  db.Close
@@ -1342,6 +1443,83 @@ End
 		End Sub
 	#tag EndMethod
 
+	#tag Method, Flags = &h1
+		Protected Sub TestTimeWithTimeZoneRoundTrip()
+		  Log "-- Test: TIME WITH TIME ZONE round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_time_tz (id INTEGER NOT NULL, v_time_tz TIME WITH TIME ZONE)")
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_time_tz (id, v_time_tz) VALUES (1, ?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, "10:11:12.3456 UTC")
+		      ps.ExecuteSQL
+		      LogPass "Bind TIME WITH TIME ZONE via prepared String"
+		    Else
+		      LogFail "Bind TIME WITH TIME ZONE via prepared String", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT v_time_tz, CAST(v_time_tz AS VARCHAR(100)) AS v_time_tz_text FROM test_time_tz WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var actualValue As String = rs.Column("v_time_tz").StringValue
+		      Var expectedValue As String = rs.Column("v_time_tz_text").StringValue
+		      If actualValue = expectedValue Then
+		        LogPass "TIME WITH TIME ZONE readback"
+		      Else
+		        LogFail "TIME WITH TIME ZONE readback", actualValue + " <> " + expectedValue
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "TIME WITH TIME ZONE readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "TIME WITH TIME ZONE round-trip", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "TIME WITH TIME ZONE round-trip", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestTimestampWithTimeZoneRoundTrip()
+		  Log "-- Test: TIMESTAMP WITH TIME ZONE round-trip --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_timestamp_tz (id INTEGER NOT NULL, v_ts_tz TIMESTAMP WITH TIME ZONE)")
+		    
+		    db.ExecuteSQL("INSERT INTO test_timestamp_tz (id, v_ts_tz) VALUES (1, ?)", "2026-04-06 13:14:15.3456 UTC")
+		    LogPass "Bind TIMESTAMP WITH TIME ZONE via ExecuteSQL params"
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT v_ts_tz, CAST(v_ts_tz AS VARCHAR(100)) AS v_ts_tz_text FROM test_timestamp_tz WHERE id = 1")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      Var actualValue As String = rs.Column("v_ts_tz").StringValue
+		      Var expectedValue As String = rs.Column("v_ts_tz_text").StringValue
+		      If actualValue = expectedValue Then
+		        LogPass "TIMESTAMP WITH TIME ZONE readback"
+		      Else
+		        LogFail "TIMESTAMP WITH TIME ZONE readback", actualValue + " <> " + expectedValue
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "TIMESTAMP WITH TIME ZONE readback", "No rows returned"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "TIMESTAMP WITH TIME ZONE round-trip", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "TIMESTAMP WITH TIME ZONE round-trip", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
 
 	#tag Method, Flags = &h1
 		Protected Sub TestSelectSQL()

@@ -282,11 +282,32 @@ static dbFieldType FirebirdTypeToXojo(short fbType, short scale, short subtype) 
         case SQL_INT64:
             if (scale < 0) return dbTypeDecimal;
             return dbTypeInt64;
+#ifdef SQL_INT128
+        case SQL_INT128:    return dbTypeText;
+#endif
         case SQL_FLOAT:     return dbTypeFloat;
         case SQL_DOUBLE:    return dbTypeDouble;
+#ifdef SQL_DEC16
+        case SQL_DEC16:     return dbTypeText;
+#endif
+#ifdef SQL_DEC34
+        case SQL_DEC34:     return dbTypeText;
+#endif
         case SQL_TYPE_DATE: return dbTypeDate;
         case SQL_TYPE_TIME: return dbTypeTime;
         case SQL_TIMESTAMP: return dbTypeTimeStamp;
+#ifdef SQL_TIME_TZ
+        case SQL_TIME_TZ:   return dbTypeText;
+#endif
+#ifdef SQL_TIME_TZ_EX
+        case SQL_TIME_TZ_EX: return dbTypeText;
+#endif
+#ifdef SQL_TIMESTAMP_TZ
+        case SQL_TIMESTAMP_TZ: return dbTypeText;
+#endif
+#ifdef SQL_TIMESTAMP_TZ_EX
+        case SQL_TIMESTAMP_TZ_EX: return dbTypeText;
+#endif
         case SQL_BLOB:
             if (subtype == 1) return dbTypeText;
             return dbTypeBinary;
@@ -762,6 +783,36 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *length = (int)val.strVal.size();
             // Store REALstring in lastValue, pass pointer TO it
             // Framework dereferences: *(REALstring*)*value
+            cd->lastValue = (void *)rs;
+            cd->lastType = *type;
+            *value = &cd->lastValue;
+            return;
+        }
+#ifdef SQL_INT128
+        case SQL_INT128:
+#endif
+#ifdef SQL_DEC16
+        case SQL_DEC16:
+#endif
+#ifdef SQL_DEC34
+        case SQL_DEC34:
+#endif
+#ifdef SQL_TIME_TZ
+        case SQL_TIME_TZ:
+#endif
+#ifdef SQL_TIME_TZ_EX
+        case SQL_TIME_TZ_EX:
+#endif
+#ifdef SQL_TIMESTAMP_TZ
+        case SQL_TIMESTAMP_TZ:
+#endif
+#ifdef SQL_TIMESTAMP_TZ_EX
+        case SQL_TIMESTAMP_TZ_EX:
+#endif
+        {
+            REALstring rs = StdToReal(val.strVal);
+            *type = (unsigned char)dbTypeREALstring;
+            *length = (int)val.strVal.size();
             cd->lastValue = (void *)rs;
             cd->lastType = *type;
             *value = &cd->lastValue;

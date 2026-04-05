@@ -122,6 +122,24 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var payload As New MemoryBlock(payloadText.Bytes)
   payload.StringValue(0, payloadText.Bytes) = payloadText
   ps.BindBinaryBlob(4, payload)
+
+  // Firebird 4/5/6 modern types use String binds and StringValue readback
+  ps = FirebirdPreparedStatement( _
+    db.Prepare("INSERT INTO modern_values (v_int128, v_dec34, v_time_tz, v_ts_tz) VALUES (?, ?, ?, ?)"))
+  ps.Bind(0, "12345678901234567890123456789012345")
+  ps.Bind(1, "12345678901234567890.12345678901234")
+  ps.Bind(2, "10:11:12.3456 UTC")
+  ps.Bind(3, "2026-04-06 13:14:15.3456 UTC")
+  ps.ExecuteSQL
+
+  Var rs As RowSet = db.SelectSQL("SELECT v_int128, v_dec34, v_time_tz, v_ts_tz FROM modern_values")
+  If Not rs.AfterLastRow Then
+    Var int128Text As String = rs.Column("v_int128").StringValue
+    Var dec34Text As String = rs.Column("v_dec34").StringValue
+    Var timeTzText As String = rs.Column("v_time_tz").StringValue
+    Var tsTzText As String = rs.Column("v_ts_tz").StringValue
+  End If
+  rs.Close
 End Sub
 
 
