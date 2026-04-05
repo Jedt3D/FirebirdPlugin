@@ -30,6 +30,8 @@ struct FirebirdCursorData {
     bool           firstRowCalled;
     bool           eof;
     bool           bof;
+    void          *lastValue;   // last allocated value, freed on next call or release
+    unsigned char  lastType;    // dbFieldType of last value
 };
 
 // ---------------------------------------------------------------------------

@@ -193,7 +193,7 @@ static REALmethodDefinition sFirebirdPreparedStmtMethods[] = {
 static REALclassDefinition sFirebirdPreparedStmtClass = {
     kCurrentREALControlVersion,
     "FirebirdPreparedStatement",             // name
-    "PreparedSQLStatement",                  // superName
+    nullptr,                                  // superName (none — framework routes via engine callback)
     sizeof(FirebirdPreparedStmtData),        // dataSize
     0,                                       // forSystemUse
     (REALproc)fbPrepStmtConstructor,
@@ -270,6 +270,8 @@ static FirebirdCursorData *NewCursorData(FBDatabase *db, FBStatement *stmt) {
     cd->firstRowCalled = false;
     cd->eof = false;
     cd->bof = true;
+    cd->lastValue = nullptr;
+    cd->lastType = 0;
     return cd;
 }
 
@@ -279,6 +281,7 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
     if (count < 0) return;
 
     for (RBInteger i = 0; i <= count && i < stmt->paramCount(); i++) {
+        // Get the Variant object from the array
         REALobject variant = nullptr;
         REALGetArrayValueObject(params, i, &variant);
         if (!variant) {
@@ -286,23 +289,51 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
             continue;
         }
 
-        REALstring strVal = nullptr;
-        int64_t intVal = 0;
-        double dblVal = 0;
-        bool boolVal = false;
+        // Bind based on what the SQL parameter expects, using Variant's named properties
+        short ptype = stmt->paramBaseType((int)i);
+        bool bound = false;
 
-        if (REALGetPropValueString(variant, "", &strVal) && strVal) {
-            std::string s = RealToStd(strVal);
-            stmt->bindString((int)i, s);
-            REALUnlockString(strVal);
-        } else if (REALGetPropValueInt64(variant, "", &intVal)) {
-            stmt->bindInt((int)i, intVal);
-        } else if (REALGetPropValueDouble(variant, "", &dblVal)) {
-            stmt->bindDouble((int)i, dblVal);
-        } else if (REALGetPropValueBoolean(variant, "", &boolVal)) {
-            stmt->bindBoolean((int)i, boolVal);
-        } else {
-            stmt->bindNull((int)i);
+        switch (ptype) {
+            case SQL_SHORT:
+            case SQL_LONG:
+            case SQL_INT64: {
+                if (stmt->paramScale((int)i) < 0) {
+                    double dblVal = 0;
+                    if (REALGetPropValueDouble(variant, "DoubleValue", &dblVal)) {
+                        stmt->bindDouble((int)i, dblVal);
+                        bound = true;
+                    }
+                } else {
+                    RBInt64 intVal = 0;
+                    if (REALGetPropValueInt64(variant, "Int64Value", &intVal)) {
+                        stmt->bindInt((int)i, intVal);
+                        bound = true;
+                    }
+                }
+                break;
+            }
+            case SQL_FLOAT:
+            case SQL_DOUBLE: {
+                double dblVal = 0;
+                if (REALGetPropValueDouble(variant, "DoubleValue", &dblVal)) {
+                    stmt->bindDouble((int)i, dblVal);
+                    bound = true;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+
+        // Fallback: bind as string using Variant.StringValue
+        if (!bound) {
+            REALstring strVal = nullptr;
+            if (REALGetPropValueString(variant, "StringValue", &strVal) && strVal) {
+                stmt->bindString((int)i, RealToStd(strVal));
+                REALUnlockString(strVal);
+            } else {
+                stmt->bindNull((int)i);
+            }
         }
 
         REALUnlockObject(variant);
@@ -410,8 +441,8 @@ static REALdbCursor fbEngineDirectSQLSelect(dbDatabase *dbData, REALstring sql) 
 static void fbEngineDirectSQLExecute(dbDatabase *dbData, REALstring sql) {
     auto *fbd = (FirebirdDbData *)dbData;
     if (!fbd || !fbd->db || !fbd->db->isConnected()) return;
-    fbd->db->executeImmediate(RealToStd(sql));
-    if (fbd->autoCommit && fbd->db->hasActiveTransaction()) {
+    bool ok = fbd->db->executeImmediate(RealToStd(sql));
+    if (ok && fbd->autoCommit && fbd->db->hasActiveTransaction()) {
         fbd->db->commit();
     }
 }
@@ -442,9 +473,9 @@ static void fbEngineExecuteSQL(dbDatabase *dbData, REALstring sql, REALarray par
     auto stmt = FBStatement();
     if (!stmt.prepare(*fbd->db, RealToStd(sql))) return;
     BindParams(&stmt, fbd->db, params);
-    stmt.execute(*fbd->db);
+    bool ok = stmt.execute(*fbd->db);
 
-    if (fbd->autoCommit && fbd->db->hasActiveTransaction()) {
+    if (ok && fbd->autoCommit && fbd->db->hasActiveTransaction()) {
         fbd->db->commit();
     }
 }
@@ -463,17 +494,26 @@ static REALstring fbEngineGetLastErrorString(dbDatabase *dbData) {
 
 static void fbEngineCommit(dbDatabase *dbData) {
     auto *fbd = (FirebirdDbData *)dbData;
-    if (fbd && fbd->db) fbd->db->commit();
+    if (fbd && fbd->db) {
+        fbd->db->commit();
+        fbd->autoCommit = true;   // Transaction ended — restore auto-commit
+    }
 }
 
 static void fbEngineRollback(dbDatabase *dbData) {
     auto *fbd = (FirebirdDbData *)dbData;
-    if (fbd && fbd->db) fbd->db->rollback();
+    if (fbd && fbd->db) {
+        fbd->db->rollback();
+        fbd->autoCommit = true;   // Transaction ended — restore auto-commit
+    }
 }
 
 static void fbEngineBeginTransaction(dbDatabase *dbData) {
     auto *fbd = (FirebirdDbData *)dbData;
-    if (fbd && fbd->db) fbd->db->beginTransaction();
+    if (fbd && fbd->db) {
+        fbd->db->beginTransaction();
+        fbd->autoCommit = false;  // Explicit transaction — no auto-commit
+    }
 }
 
 static REALobject fbEnginePrepareStatement(dbDatabase *dbData, REALstring sql) {
@@ -560,9 +600,13 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
         case SQL_TEXT:
         case SQL_VARYING: {
             REALstring rs = StdToReal(val.strVal);
-            *type = (unsigned char)dbTypeText;
-            *value = (void *)rs;
+            *type = (unsigned char)dbTypeREALstring;
             *length = (int)val.strVal.size();
+            // Store REALstring in lastValue, pass pointer TO it
+            // Framework dereferences: *(REALstring*)*value
+            cd->lastValue = (void *)rs;
+            cd->lastType = *type;
+            *value = &cd->lastValue;
             return;
         }
         case SQL_SHORT: {
@@ -579,6 +623,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
                 *value = v;
                 *length = sizeof(int32_t);
             }
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_LONG: {
@@ -595,6 +641,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
                 *value = v;
                 *length = sizeof(int32_t);
             }
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_INT64: {
@@ -611,6 +659,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
                 *value = v;
                 *length = sizeof(int64_t);
             }
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_FLOAT:
@@ -620,6 +670,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *type = (unsigned char)dbTypeDouble;
             *value = d;
             *length = sizeof(double);
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_TYPE_DATE: {
@@ -633,6 +685,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *type = (unsigned char)dbTypeDate;
             *value = dd;
             *length = sizeof(dbDate);
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_TYPE_TIME: {
@@ -646,6 +700,8 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *type = (unsigned char)dbTypeTime;
             *value = dt;
             *length = sizeof(dbTime);
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_TIMESTAMP: {
@@ -662,24 +718,32 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *type = (unsigned char)dbTypeTimeStamp;
             *value = ts;
             *length = sizeof(dbTimeStamp);
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
         case SQL_BLOB: {
             if (cd->db && info.sqlsubtype == 1) {
+                // Text BLOB — read with UTF-8 transliteration
                 std::string blobData;
-                cd->db->readBlob(val.blobId, blobData);
+                cd->db->readBlob(val.blobId, blobData, true);
                 REALstring rs = StdToReal(blobData);
-                *type = (unsigned char)dbTypeText;
-                *value = (void *)rs;
+                *type = (unsigned char)dbTypeREALstring;
                 *length = (int)blobData.size();
+                cd->lastValue = (void *)rs;
+                cd->lastType = *type;
+                *value = &cd->lastValue;
             } else if (cd->db) {
+                // Binary BLOB — return raw bytes
                 std::string blobData;
-                cd->db->readBlob(val.blobId, blobData);
-                REALstring rs = REALBuildStringWithEncoding(blobData.c_str(),
-                    (int)blobData.size(), kREALTextEncodingASCII);
-                *type = (unsigned char)dbTypeBinary;
-                *value = (void *)rs;
+                cd->db->readBlob(val.blobId, blobData, false);
                 *length = (int)blobData.size();
+                char *buf = (char *)malloc(*length);
+                memcpy(buf, blobData.c_str(), *length);
+                *type = (unsigned char)dbTypeBinary;
+                *value = buf;
+                cd->lastValue = *value;
+                cd->lastType = *type;
             } else {
                 *type = (unsigned char)dbTypeNull;
                 *value = nullptr;
@@ -694,21 +758,34 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
             *type = (unsigned char)dbTypeBoolean;
             *value = b;
             *length = sizeof(RBBoolean);
+            cd->lastValue = *value;
+            cd->lastType = *type;
             return;
         }
 #endif
         default: {
             REALstring rs = StdToReal(val.strVal);
-            *type = (unsigned char)dbTypeText;
-            *value = (void *)rs;
+            *type = (unsigned char)dbTypeREALstring;
             *length = (int)val.strVal.size();
+            cd->lastValue = (void *)rs;
+            cd->lastType = *type;
+            *value = &cd->lastValue;
             return;
         }
     }
 }
 
 static void fbCursorReleaseValue(dbCursor *cursor) {
-    // Xojo framework manages lifetime of returned values
+    auto *cd = (FirebirdCursorData *)cursor;
+    if (!cd || !cd->lastValue) return;
+
+    if (cd->lastType == (unsigned char)dbTypeREALstring) {
+        REALUnlockString((REALstring)cd->lastValue);
+    } else {
+        free(cd->lastValue);
+    }
+    cd->lastValue = nullptr;
+    cd->lastType = (unsigned char)dbTypeNull;
 }
 
 static RBBoolean fbCursorNextRow(dbCursor *cursor) {

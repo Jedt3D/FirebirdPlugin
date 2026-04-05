@@ -72,6 +72,8 @@ public:
     FBValue columnValue(int index) const;   // read current row
 
     int  paramCount() const;
+    short paramBaseType(int index) const;
+    short paramScale(int index) const;
 
     // Bind helpers — index is 0-based
     void bindNull(int index);
@@ -138,8 +140,8 @@ public:
     // Execute without result set
     bool executeImmediate(const std::string &sql);
 
-    // Read a BLOB into a string buffer
-    bool readBlob(ISC_QUAD blobId, std::string &out);
+    // Read a BLOB into a string buffer (isText=true requests UTF-8 transliteration)
+    bool readBlob(ISC_QUAD blobId, std::string &out, bool isText = false);
 
     // Create a BLOB, returns its ID
     bool writeBlob(const void *data, size_t len, ISC_QUAD &outId);
@@ -152,6 +154,7 @@ public:
     isc_db_handle  &dbHandle()    { return mDB; }
     isc_tr_handle  &transHandle() { return mTrans; }
     int             dialect() const { return mDialect; }
+    const std::string &charset() const { return mCharset; }
 
     // Schema introspection helpers — return SQL to query Firebird system tables
     static const char *tableListSQL();
@@ -167,6 +170,7 @@ private:
     ISC_STATUS_ARRAY mStatus = {};
     bool            mConnected = false;
     int             mDialect = 3;
+    std::string     mCharset = "UTF8";
     long            mErrorCode = 0;
     std::string     mErrorMsg;
 

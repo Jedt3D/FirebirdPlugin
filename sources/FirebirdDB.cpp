@@ -23,6 +23,7 @@ bool FBDatabase::connect(const std::string &database,
     if (mConnected) disconnect();
     clearError();
     mDialect = dialect;
+    mCharset = charset.empty() ? "UTF8" : charset;
 
     // Build DPB
     char dpb[512];
@@ -142,12 +143,22 @@ bool FBDatabase::executeImmediate(const std::string &sql) {
     return true;
 }
 
-bool FBDatabase::readBlob(ISC_QUAD blobId, std::string &out) {
+bool FBDatabase::readBlob(ISC_QUAD blobId, std::string &out, bool isText) {
     if (!mConnected || !mTrans) return false;
     clearError();
 
+    // For text blobs, build a BPB requesting UTF-8 transliteration
+    // so Firebird converts from the blob's native charset to UTF-8
+    ISC_UCHAR bpb[] = {
+        isc_bpb_version1,
+        isc_bpb_target_type, 1, 1,     // target type = text
+        isc_bpb_target_interp, 1, 4    // target charset = UTF8 (charset id 4)
+    };
+    ISC_USHORT bpb_len = isText ? (ISC_USHORT)sizeof(bpb) : 0;
+    const ISC_UCHAR *bpb_ptr = isText ? bpb : nullptr;
+
     isc_blob_handle blob = 0;
-    if (isc_open_blob2(mStatus, &mDB, &mTrans, &blob, &blobId, 0, nullptr)) {
+    if (isc_open_blob2(mStatus, &mDB, &mTrans, &blob, &blobId, bpb_len, bpb_ptr)) {
         captureError();
         return false;
     }
@@ -234,7 +245,7 @@ const char *FBDatabase::columnListSQL() {
            "F.RDB$FIELD_SCALE AS FIELD_SCALE, "
            "RF.RDB$NULL_FLAG AS NOT_NULL_FLAG, "
            "RF.RDB$DEFAULT_SOURCE AS DEFAULT_SOURCE, "
-           "F.RDB$CHARACTER_LENGTH AS CHAR_LENGTH "
+           "F.RDB$CHARACTER_LENGTH AS CHAR_LEN "
            "FROM RDB$RELATION_FIELDS RF "
            "JOIN RDB$FIELDS F ON RF.RDB$FIELD_SOURCE = F.RDB$FIELD_NAME "
            "WHERE RF.RDB$RELATION_NAME = ? "
@@ -475,6 +486,16 @@ const FBColumnInfo &FBStatement::columnInfo(int index) const {
 
 int FBStatement::paramCount() const {
     return mInSqlda ? mInSqlda->sqld : 0;
+}
+
+short FBStatement::paramBaseType(int index) const {
+    if (!mInSqlda || index < 0 || index >= mInSqlda->sqld) return 0;
+    return mInSqlda->sqlvar[index].sqltype & ~1;
+}
+
+short FBStatement::paramScale(int index) const {
+    if (!mInSqlda || index < 0 || index >= mInSqlda->sqld) return 0;
+    return mInSqlda->sqlvar[index].sqlscale;
 }
 
 int FBStatement::statementType() const {
@@ -756,18 +777,26 @@ void FBStatement::bindTimestamp(int index, ISC_TIMESTAMP val) {
 void FBStatement::bindBoolean(int index, bool val) {
     if (!mInSqlda || index >= mInSqlda->sqld) return;
     XSQLVAR *var = &mInSqlda->sqlvar[index];
+    short dtype = var->sqltype & ~1;
 
+    // Respect the parameter's original type from describe_bind
 #ifdef SQL_BOOLEAN
-    var->sqltype = SQL_BOOLEAN | (var->sqltype & 1);
-    if (var->sqldata) free(var->sqldata);
-    var->sqldata = (char *)calloc(1, sizeof(unsigned char));
-    *(unsigned char *)var->sqldata = val ? 1 : 0;
-#else
-    // Fallback: bind as SMALLINT
-    var->sqltype = SQL_SHORT | (var->sqltype & 1);
-    if (var->sqldata) free(var->sqldata);
-    var->sqldata = (char *)calloc(1, sizeof(short));
-    *(short *)var->sqldata = val ? 1 : 0;
+    if (dtype == SQL_BOOLEAN) {
+        *(unsigned char *)var->sqldata = val ? 1 : 0;
+    } else
 #endif
+    if (dtype == SQL_SHORT) {
+        *(short *)var->sqldata = val ? 1 : 0;
+    } else if (dtype == SQL_LONG) {
+        *(ISC_LONG *)var->sqldata = val ? 1 : 0;
+    } else if (dtype == SQL_INT64) {
+        *(ISC_INT64 *)var->sqldata = val ? 1 : 0;
+    } else {
+        // Unknown type — use SMALLINT
+        var->sqltype = SQL_SHORT | (var->sqltype & 1);
+        if (var->sqldata) free(var->sqldata);
+        var->sqldata = (char *)calloc(1, sizeof(short));
+        *(short *)var->sqldata = val ? 1 : 0;
+    }
     if (var->sqlind) *var->sqlind = 0;
 }

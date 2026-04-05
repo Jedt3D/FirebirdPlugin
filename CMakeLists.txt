@@ -213,3 +213,13 @@ add_custom_command(TARGET ${PLUGIN_NAME} POST_BUILD
         "${CMAKE_BINARY_DIR}/plugin/Version.info"
     COMMENT "Staged plugin binary for ${XOJO_PLATFORM}"
 )
+
+# Create .xojo_plugin ZIP archive
+add_custom_command(TARGET ${PLUGIN_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/${PLUGIN_NAME}.xojo_plugin"
+        --format=zip
+        "${PLUGIN_NAME}" "Version.info"
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/plugin"
+    COMMENT "Packaged ${PLUGIN_NAME}.xojo_plugin"
+)
