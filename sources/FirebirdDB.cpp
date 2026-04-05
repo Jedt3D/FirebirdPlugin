@@ -621,6 +621,19 @@ bool FBDatabase::databaseInfo(const unsigned char *items, short itemLen, std::ve
     return true;
 }
 
+bool FBDatabase::transactionInfo(const unsigned char *items, short itemLen, std::vector<char> &out) {
+    if (!mConnected || !mTrans) return false;
+    clearError();
+
+    out.assign(512, 0);
+    if (isc_transaction_info(mStatus, &mTrans, itemLen, reinterpret_cast<const char *>(items),
+                             (short)out.size(), out.data())) {
+        captureError();
+        return false;
+    }
+    return true;
+}
+
 const char *FBDatabase::findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const {
     len = 0;
     size_t pos = 0;
@@ -724,6 +737,105 @@ bool FBDatabase::isReadOnly(bool &out) {
     if (!value || len <= 0) return false;
 
     out = isc_vax_integer(value, len) != 0;
+    return true;
+}
+
+bool FBDatabase::transactionID(int64_t &out) {
+    const unsigned char items[] = { isc_info_tra_id };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!transactionInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_tra_id, len);
+    if (!value || len <= 0) return false;
+
+    out = (int64_t)isc_portable_integer(reinterpret_cast<const ISC_UCHAR *>(value), len);
+    return true;
+}
+
+bool FBDatabase::transactionIsolation(std::string &out) {
+    const unsigned char items[] = { isc_info_tra_isolation };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!transactionInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_tra_isolation, len);
+    if (!value || len <= 0) return false;
+
+    unsigned char isolation = (unsigned char)value[0];
+    switch (isolation) {
+        case isc_info_tra_consistency:
+            out = "consistency";
+            return true;
+
+        case isc_info_tra_concurrency:
+            out = "concurrency";
+            return true;
+
+        case isc_info_tra_read_committed:
+            if (len > 1) {
+                unsigned char option = (unsigned char)value[1];
+                switch (option) {
+                    case isc_info_tra_no_rec_version:
+                        out = "read committed no record version";
+                        return true;
+
+                    case isc_info_tra_rec_version:
+                        out = "read committed record version";
+                        return true;
+
+                    case isc_info_tra_read_consistency:
+                        out = "read committed read consistency";
+                        return true;
+                }
+            }
+
+            out = "read committed";
+            return true;
+    }
+
+    out.clear();
+    return false;
+}
+
+bool FBDatabase::transactionAccessMode(std::string &out) {
+    const unsigned char items[] = { isc_info_tra_access };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!transactionInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_tra_access, len);
+    if (!value || len <= 0) return false;
+
+    unsigned char access = (unsigned char)value[0];
+    switch (access) {
+        case isc_info_tra_readonly:
+            out = "read only";
+            return true;
+
+        case isc_info_tra_readwrite:
+            out = "read write";
+            return true;
+    }
+
+    out.clear();
+    return false;
+}
+
+bool FBDatabase::transactionLockTimeout(long &out) {
+    const unsigned char items[] = { isc_info_tra_lock_timeout };
+    std::vector<char> info;
+    short len = 0;
+
+    if (!transactionInfo(items, sizeof(items), info)) return false;
+
+    const char *value = findInfoItem(info, isc_info_tra_lock_timeout, len);
+    if (!value || len <= 0) return false;
+
+    out = (long)isc_portable_integer(reinterpret_cast<const ISC_UCHAR *>(value), len);
     return true;
 }
 

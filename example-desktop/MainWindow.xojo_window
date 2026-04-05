@@ -167,6 +167,7 @@ End
 		  TestExecuteSQL
 		  TestTransaction
 		  TestTransactionRollback
+		  TestTransactionInfo
 		  TestPreparedStatementSelect
 		  TestPreparedStatementExecute
 		  TestPreparedStatementBindTypes
@@ -1731,6 +1732,82 @@ End
 		    End If
 		  Catch ex As DatabaseException
 		    LogFail "Table schema", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestTransactionInfo()
+		  Log "-- Test: Transaction info --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.HasActiveTransaction = False Then
+		      LogPass "No active transaction before BeginTransaction"
+		    Else
+		      LogFail "No active transaction before BeginTransaction", "Expected False"
+		    End If
+		    
+		    If db.TransactionID = 0 Then
+		      LogPass "TransactionID without active transaction"
+		    Else
+		      LogFail "TransactionID without active transaction", "Expected 0"
+		    End If
+		    
+		    db.BeginTransaction
+		    
+		    If db.HasActiveTransaction Then
+		      LogPass "HasActiveTransaction after BeginTransaction"
+		    Else
+		      LogFail "HasActiveTransaction after BeginTransaction", "Expected True"
+		    End If
+		    
+		    Var txnId As Int64 = db.TransactionID
+		    If txnId > 0 Then
+		      LogPass "TransactionID: " + txnId.ToString
+		    Else
+		      LogFail "TransactionID", "Expected > 0"
+		    End If
+		    
+		    Var isolation As String = db.TransactionIsolation
+		    If isolation = "concurrency" Then
+		      LogPass "TransactionIsolation: " + isolation
+		    Else
+		      LogFail "TransactionIsolation", "Unexpected value: " + isolation
+		    End If
+		    
+		    Var accessMode As String = db.TransactionAccessMode
+		    If accessMode = "read write" Then
+		      LogPass "TransactionAccessMode: " + accessMode
+		    Else
+		      LogFail "TransactionAccessMode", "Unexpected value: " + accessMode
+		    End If
+		    
+		    Var timeout As Integer = db.TransactionLockTimeout
+		    If timeout >= -1 Then
+		      LogPass "TransactionLockTimeout: " + timeout.ToString
+		    Else
+		      LogFail "TransactionLockTimeout", "Expected -1 or greater"
+		    End If
+		    
+		    db.CommitTransaction
+		    
+		    If db.HasActiveTransaction = False Then
+		      LogPass "No active transaction after CommitTransaction"
+		    Else
+		      LogFail "No active transaction after CommitTransaction", "Expected False"
+		    End If
+		    
+		  Catch ex As DatabaseException
+		    LogFail "Transaction info", ex.Message
+		    Try
+		      db.RollbackTransaction
+		    Catch rollEx As DatabaseException
+		    End Try
 		  End Try
 		  
 		  db.Close

@@ -154,6 +154,12 @@ public:
     bool odsVersion(std::string &out);
     bool isReadOnly(bool &out);
 
+    // Transaction information helpers
+    bool transactionID(int64_t &out);
+    bool transactionIsolation(std::string &out);
+    bool transactionAccessMode(std::string &out);
+    bool transactionLockTimeout(long &out);
+
     // Error state
     long lastErrorCode() const { return mErrorCode; }
     const std::string &lastErrorString() const { return mErrorMsg; }
@@ -171,6 +177,7 @@ public:
 
 private:
     bool databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
+    bool transactionInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
     const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();

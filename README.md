@@ -10,6 +10,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
+- Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -74,6 +75,29 @@ System.DebugLog("PageSize: " + db.PageSize.ToString)
 System.DebugLog("SQL dialect: " + db.DatabaseSQLDialect.ToString)
 System.DebugLog("ODSVersion: " + db.ODSVersion)
 System.DebugLog("ReadOnly: " + db.IsReadOnly.ToString)
+```
+
+## Firebird Transaction Info
+
+`FirebirdDatabase` also exposes a small typed transaction-info surface over `isc_transaction_info` for the currently active explicit transaction:
+
+```vb
+db.BeginTransaction
+
+If db.HasActiveTransaction Then
+  System.DebugLog("TransactionID: " + db.TransactionID.ToString)
+  System.DebugLog("Isolation: " + db.TransactionIsolation)
+  System.DebugLog("AccessMode: " + db.TransactionAccessMode)
+
+  Var lockTimeout As Integer = db.TransactionLockTimeout
+  If lockTimeout = -1 Then
+    System.DebugLog("Lock timeout: wait indefinitely")
+  Else
+    System.DebugLog("Lock timeout: " + lockTimeout.ToString)
+  End If
+End If
+
+db.CommitTransaction
 ```
 
 ## PreparedStatement Type Binds

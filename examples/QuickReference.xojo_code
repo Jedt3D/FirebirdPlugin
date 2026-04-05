@@ -108,6 +108,14 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var ods As String = db.ODSVersion
   Var readOnly As Boolean = db.IsReadOnly
 
+  // Transaction info helpers
+  If db.HasActiveTransaction Then
+    Var txnId As Int64 = db.TransactionID
+    Var isolation As String = db.TransactionIsolation
+    Var accessMode As String = db.TransactionAccessMode
+    Var lockTimeout As Integer = db.TransactionLockTimeout
+  End If
+
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
     db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))

@@ -291,7 +291,7 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
-// Example 11: Database Info
+// Example 11: Database and Transaction Info
 // ---------------------------------------------------------------------------
 
 Sub DatabaseInfoExample(db As FirebirdDatabase)
@@ -301,6 +301,24 @@ Sub DatabaseInfoExample(db As FirebirdDatabase)
     System.DebugLog("DatabaseSQLDialect: " + db.DatabaseSQLDialect.ToString)
     System.DebugLog("ODSVersion: " + db.ODSVersion)
     System.DebugLog("IsReadOnly: " + db.IsReadOnly.ToString)
+
+    db.BeginTransaction
+    If db.HasActiveTransaction Then
+      System.DebugLog("TransactionID: " + db.TransactionID.ToString)
+      System.DebugLog("TransactionIsolation: " + db.TransactionIsolation)
+      System.DebugLog("TransactionAccessMode: " + db.TransactionAccessMode)
+
+      Var lockTimeout As Integer = db.TransactionLockTimeout
+      If lockTimeout = -1 Then
+        System.DebugLog("TransactionLockTimeout: wait indefinitely")
+      Else
+        System.DebugLog("TransactionLockTimeout: " + lockTimeout.ToString)
+      End If
+    End If
+    db.CommitTransaction
+  Catch err As DatabaseException
+    Call db.RollbackTransaction
+    System.DebugLog("Transaction info error: " + err.Message)
   Catch err As RuntimeException
     System.DebugLog("Metadata error: " + err.Message)
   End Try

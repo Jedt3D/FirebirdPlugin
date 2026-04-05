@@ -227,8 +227,8 @@ The checklist below compares the current Xojo plugin to that surface.
 | Text BLOB read | `isc_open_blob2`, `isc_get_segment` with transliteration BPB | `[x]` | Implemented internally |
 | Binary BLOB read | `isc_open_blob2`, `isc_get_segment` | `[x]` | Implemented internally |
 | Array API | `isc_array_*` | `[ ]` | Not implemented |
-| Database info API | `isc_database_info` | `[ ]` | Not implemented yet; planned feature for Firebird 4/5/6 support |
-| Transaction info API | `isc_transaction_info` | `[ ]` | Not implemented |
+| Database info API | `isc_database_info` | `[x]` | Exposed to Xojo through typed database info helper methods |
+| Transaction info API | `isc_transaction_info` | `[-]` | Phase 03 exposes typed inspection helpers for the active transaction; TPB/isolation configuration is still deferred |
 | Request API / BLR style APIs | low-level request functions | `[ ]` | Not implemented and probably out of scope for Xojo v1 |
 | Event API | `isc_event_*` | `[ ]` | Not implemented |
 | Security/user management core API | security-related APIs | `[ ]` | Not implemented |
@@ -253,6 +253,7 @@ The checklist below compares the current Xojo plugin to that surface.
 - text BLOB and binary BLOB binding through Xojo prepared statements
 - row iteration and column access
 - transaction begin, commit, rollback
+- transaction info helpers for active transaction inspection
 - schema helpers: tables, columns, indexes
 - database info helpers backed by `isc_database_info`
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
@@ -270,9 +271,9 @@ The checklist below compares the current Xojo plugin to that surface.
 - Services API
 - Events API
 - Array API
-- transaction info APIs
 - modern interface-based API
 - configurable transaction parameter buffers and isolation controls
+- broader transaction management APIs beyond current inspection helpers
 - explicit generated keys / richer `RETURNING` handling API
 - batch APIs beyond repeated prepared statement execution
 
@@ -289,6 +290,7 @@ This is the intended feature set for the Xojo plugin within the current scope.
 - prepared statements
 - rowset iteration and column access
 - transaction begin, commit, rollback
+- transaction info helpers for active transaction inspection
 - schema helpers for tables, columns, and indexes
 - database info helpers backed by `isc_database_info`
 
@@ -317,7 +319,6 @@ This is the intended feature set for the Xojo plugin within the current scope.
 
 ### Deferred features
 
-- transaction info helpers
 - Services API
 - Events API
 - Array API
@@ -368,6 +369,7 @@ Current suite entry points:
 
 - `TestConnect`
 - `TestConnectBadCredentials`
+- `TestDatabaseInfo`
 - `TestSelectSQL`
 - `TestSelectSQLColumnTypes`
 - `TestSelectSQLUnicodeThai`
@@ -377,10 +379,23 @@ Current suite entry points:
 - `TestExecuteSQL`
 - `TestTransaction`
 - `TestTransactionRollback`
+- `TestTransactionInfo`
 - `TestPreparedStatementSelect`
 - `TestPreparedStatementExecute`
 - `TestPreparedStatementBindTypes`
+- `TestPreparedStatementBindTemporalTypes`
+- `TestPreparedStatementBindBlobs`
 - `TestPreparedStatementBindNull`
+- `TestNativeBooleanRoundTrip`
+- `TestScaledNumericRoundTrip`
+- `TestInt128RoundTrip`
+- `TestDecFloatRoundTrip`
+- `TestTimeWithTimeZoneRoundTrip`
+- `TestTimestampWithTimeZoneRoundTrip`
+- `TestReturningClause`
+- `TestExecuteBlock`
+- `TestExecuteProcedure`
+- `TestEmbeddedConnect`
 - `TestTableSchema`
 - `TestFieldSchema`
 - `TestDatabaseIndexes`
@@ -397,6 +412,7 @@ Current suite entry points:
 | --- | --- | --- | --- |
 | `TestConnect` | valid attach and detach | Database connection control | `isc_attach_database`, `isc_detach_database` |
 | `TestConnectBadCredentials` | auth failure path and error propagation | Database connection control, error handling | `isc_attach_database`, status vector capture |
+| `TestDatabaseInfo` | server version, page size, SQL dialect, ODS, read-only flag | Informational functions | `isc_database_info` |
 | `TestSelectSQL` | scalar select query | Statement execution | `isc_dsql_allocate_statement`, `isc_dsql_prepare`, `isc_dsql_execute`, `isc_dsql_fetch` |
 | `TestSelectSQLColumnTypes` | integer, string, integer, double readback | Statement execution, type conversions | DSQL prepare/fetch plus XSQLDA output mapping |
 | `TestSelectSQLUnicodeThai` | UTF-8 text round-trip and transliteration expectations | Database connection control, type conversions | DPB charset handling plus text fetch |
@@ -406,10 +422,23 @@ Current suite entry points:
 | `TestExecuteSQL` | insert, update, delete | Statement execution, auto-commit behavior | `isc_dsql_execute_immediate` or prepared execute path plus commit |
 | `TestTransaction` | committed insert persists | Transaction control | `isc_start_transaction`, `isc_commit_transaction` |
 | `TestTransactionRollback` | rolled-back insert disappears | Transaction control | `isc_start_transaction`, `isc_rollback_transaction` |
+| `TestTransactionInfo` | active transaction state, id, isolation, access mode, lock timeout | Transaction control, informational functions | `isc_start_transaction`, `isc_transaction_info`, `isc_commit_transaction` |
 | `TestPreparedStatementSelect` | prepared select with bound parameter | Statement execution, parameter metadata | allocate/prepare/describe_bind/execute/fetch |
 | `TestPreparedStatementExecute` | prepared insert | Statement execution | allocate/prepare/execute |
 | `TestPreparedStatementBindTypes` | string, int64, double, boolean binds and readback | Statement execution, type conversions | XSQLDA input binding for text/numeric/boolean |
+| `TestPreparedStatementBindTemporalTypes` | `DATE`, `TIME`, and `TIMESTAMP` prepared binds and readback | Statement execution, type conversions | XSQLDA input/output mapping for legacy temporal types |
+| `TestPreparedStatementBindBlobs` | text and binary BLOB bind/fetch behavior | Blob functions, statement execution | `isc_create_blob2`, `isc_put_segment`, `isc_open_blob2`, `isc_get_segment` |
 | `TestPreparedStatementBindNull` | null indicator for prepared parameter | Statement execution, null semantics | XSQLVAR `sqlind` handling |
+| `TestNativeBooleanRoundTrip` | native Firebird `BOOLEAN` storage and readback | Statement execution, type conversions | XSQLDA input/output mapping for `SQL_BOOLEAN` |
+| `TestScaledNumericRoundTrip` | scaled `NUMERIC` / `DECIMAL` round-trip behavior | Statement execution, type conversions | XSQLDA input/output mapping for scaled numerics |
+| `TestInt128RoundTrip` | `INT128` and `NUMERIC(38,4)` round-trip behavior | Statement execution, type conversions | utility-interface conversion plus XSQLDA mapping |
+| `TestDecFloatRoundTrip` | `DECFLOAT(16)` and `DECFLOAT(34)` round-trip behavior | Statement execution, type conversions | utility-interface conversion plus XSQLDA mapping |
+| `TestTimeWithTimeZoneRoundTrip` | `TIME WITH TIME ZONE` round-trip behavior | Statement execution, type conversions | utility-interface conversion plus XSQLDA mapping |
+| `TestTimestampWithTimeZoneRoundTrip` | `TIMESTAMP WITH TIME ZONE` round-trip behavior | Statement execution, type conversions | utility-interface conversion plus XSQLDA mapping |
+| `TestReturningClause` | Firebird `RETURNING` row behavior | Statement execution | execute-with-output via DSQL and output XSQLDA |
+| `TestExecuteBlock` | `EXECUTE BLOCK` result row behavior | Statement execution | DSQL prepare/execute/fetch on Firebird-specific SQL |
+| `TestExecuteProcedure` | executable stored procedure singleton-row behavior | Statement execution, statement-type inspection | `isc_dsql_sql_info`, execute-with-output |
+| `TestEmbeddedConnect` | hostless/local attachment path behavior | Database connection control | `isc_attach_database` with local attachment string |
 | `TestTableSchema` | tables metadata via system tables | Statement execution, informational behavior implemented by SQL | custom SQL over `RDB$` metadata tables |
 | `TestFieldSchema` | columns metadata via system tables | Statement execution, informational behavior implemented by SQL | custom SQL over `RDB$` metadata tables |
 | `TestDatabaseIndexes` | index metadata via system tables | Statement execution, informational behavior implemented by SQL | custom SQL over `RDB$` metadata tables |
@@ -427,7 +456,7 @@ These are notable areas not covered by the current local desktop suite:
 - concurrent transaction visibility / isolation tests
 - statement reuse after multiple execute cycles
 - generated keys abstraction
-- transaction info / service APIs
+- Services API and operational workflows
 
 ## Planned Test Additions Inspired by Jaybird, .NET, and Python
 
@@ -439,17 +468,17 @@ These should be added first because the underlying C++ layer already supports mo
 
 | Planned test | Primary upstream inspiration | C-SDK area | Why it matters |
 | --- | --- | --- | --- |
-| Prepared date bind round-trip | Jaybird, .NET | Statement execution, type conversions | Internal bind exists but no Xojo exposure or local test |
-| Prepared time bind round-trip | Jaybird, .NET | Statement execution, type conversions | Same gap as date |
-| Prepared timestamp bind round-trip | Jaybird, .NET | Statement execution, type conversions | Same gap as date |
-| Text BLOB insert and fetch | Jaybird, Python | Blob functions | Current code reads/writes blobs but local suite does not prove it |
-| Binary BLOB insert and fetch | .NET, Python | Blob functions | Needed to validate non-text blob path |
-| Native `BOOLEAN` round-trip | Jaybird, .NET | Statement execution, type conversions | Current tests mostly validate boolean compatibility via numeric storage |
-| `NUMERIC` / `DECIMAL` scale matrix | Jaybird, .NET | Type conversions | Important for correctness of scaled numerics |
-| Stored procedure execute and result variables | Jaybird | Statement execution | Current code has executable procedure handling |
-| `RETURNING` result behavior | Jaybird | Statement execution | Firebird-specific and central for insert workflows |
-| `EXECUTE BLOCK` basic execution | Python, firebird-qa | Statement execution | Validates Firebird-specific SQL path |
-| Embedded/local attachment test | Jaybird native/embedded, Python | Database connection control | Current examples mention it, local test suite does not prove it |
+| Prepared date bind round-trip | Jaybird, .NET | Statement execution, type conversions | Complete in Phase 01 |
+| Prepared time bind round-trip | Jaybird, .NET | Statement execution, type conversions | Complete in Phase 01 |
+| Prepared timestamp bind round-trip | Jaybird, .NET | Statement execution, type conversions | Complete in Phase 01 |
+| Text BLOB insert and fetch | Jaybird, Python | Blob functions | Complete in Phase 01 |
+| Binary BLOB insert and fetch | .NET, Python | Blob functions | Complete in Phase 01 |
+| Native `BOOLEAN` round-trip | Jaybird, .NET | Statement execution, type conversions | Complete in Phase 01 |
+| `NUMERIC` / `DECIMAL` scale matrix | Jaybird, .NET | Type conversions | Complete in Phase 01 |
+| Stored procedure execute and result variables | Jaybird | Statement execution | Complete in Phase 01 |
+| `RETURNING` result behavior | Jaybird | Statement execution | Complete in Phase 01 |
+| `EXECUTE BLOCK` basic execution | Python, firebird-qa | Statement execution | Complete in Phase 01 |
+| Embedded/local attachment test | Jaybird native/embedded, Python | Database connection control | Complete in Phase 01 |
 
 ### Phase 2: Add Firebird 4/5/6 modern type support
 
@@ -468,12 +497,11 @@ Status: completed on April 6, 2026.
 
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
-| database info helpers | Jaybird, .NET | Missing | High |
-| transaction info helpers | Jaybird, .NET | Missing | Medium |
+| database info helpers | Jaybird, .NET | Complete in Phase 01 | Done |
+| transaction info helpers | Jaybird, .NET | Complete in Phase 03 as inspection helpers | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Missing | Medium |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
-| `INT128` / `DECFLOAT` / TZ types | Jaybird, .NET | Missing | High for Firebird 4/5/6 compatibility |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
 ## Explicit Checklist for Next Engineering Pass
@@ -486,7 +514,6 @@ Status: completed on April 6, 2026.
 
 ### Do next
 
-- add transaction info helpers backed by `isc_transaction_info`
 - design richer transaction controls using Jaybird as the behavioral reference
 - decide whether generated-key helpers should remain SQL-only through `RETURNING` or gain explicit convenience APIs
 - evaluate Services API scope for backup, restore, and user-management workflows

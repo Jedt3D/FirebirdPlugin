@@ -45,10 +45,15 @@ static void         fbClassConstructor(REALobject instance);
 static void         fbClassDestructor(REALobject instance);
 static RBBoolean    fbClassConnect(REALobject instance);
 static REALstring   fbClassServerVersion(REALobject instance);
-static int32_t      fbClassPageSize(REALobject instance);
-static int32_t      fbClassDatabaseSQLDialect(REALobject instance);
+static RBInteger    fbClassPageSize(REALobject instance);
+static RBInteger    fbClassDatabaseSQLDialect(REALobject instance);
 static REALstring   fbClassODSVersion(REALobject instance);
 static RBBoolean    fbClassIsReadOnly(REALobject instance);
+static RBBoolean    fbClassHasActiveTransaction(REALobject instance);
+static RBInt64      fbClassTransactionID(REALobject instance);
+static REALstring   fbClassTransactionIsolation(REALobject instance);
+static REALstring   fbClassTransactionAccessMode(REALobject instance);
+static RBInteger    fbClassTransactionLockTimeout(REALobject instance);
 
 // Prepared statement class methods
 static void         fbPrepStmtConstructor(REALobject instance);
@@ -157,6 +162,11 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassDatabaseSQLDialect, REALnoImplementation, "DatabaseSQLDialect() As Integer", REALconsoleSafe },
     { (REALproc)fbClassODSVersion, REALnoImplementation, "ODSVersion() As String", REALconsoleSafe },
     { (REALproc)fbClassIsReadOnly, REALnoImplementation, "IsReadOnly() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassHasActiveTransaction, REALnoImplementation, "HasActiveTransaction() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassTransactionID, REALnoImplementation, "TransactionID() As Int64", REALconsoleSafe },
+    { (REALproc)fbClassTransactionIsolation, REALnoImplementation, "TransactionIsolation() As String", REALconsoleSafe },
+    { (REALproc)fbClassTransactionAccessMode, REALnoImplementation, "TransactionAccessMode() As String", REALconsoleSafe },
+    { (REALproc)fbClassTransactionLockTimeout, REALnoImplementation, "TransactionLockTimeout() As Integer", REALconsoleSafe },
 };
 
 static REALclassDefinition sFirebirdDatabaseClass = {
@@ -1110,22 +1120,22 @@ static REALstring fbClassServerVersion(REALobject instance) {
     return StdToReal(value);
 }
 
-static int32_t fbClassPageSize(REALobject instance) {
+static RBInteger fbClassPageSize(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return 0;
 
     long value = 0;
     if (!fbd->db->pageSize(value)) return 0;
-    return (int32_t)value;
+    return (RBInteger)value;
 }
 
-static int32_t fbClassDatabaseSQLDialect(REALobject instance) {
+static RBInteger fbClassDatabaseSQLDialect(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return 0;
 
     long value = 0;
     if (!fbd->db->databaseSQLDialect(value)) return 0;
-    return (int32_t)value;
+    return (RBInteger)value;
 }
 
 static REALstring fbClassODSVersion(REALobject instance) {
@@ -1144,6 +1154,48 @@ static RBBoolean fbClassIsReadOnly(REALobject instance) {
     bool value = false;
     if (!fbd->db->isReadOnly(value)) return false;
     return value;
+}
+
+static RBBoolean fbClassHasActiveTransaction(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->hasActiveTransaction();
+}
+
+static RBInt64 fbClassTransactionID(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db || !fbd->db->hasActiveTransaction()) return 0;
+
+    int64_t value = 0;
+    if (!fbd->db->transactionID(value)) return 0;
+    return (RBInt64)value;
+}
+
+static REALstring fbClassTransactionIsolation(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db || !fbd->db->hasActiveTransaction()) return StdToReal("");
+
+    std::string value;
+    if (!fbd->db->transactionIsolation(value)) return StdToReal("");
+    return StdToReal(value);
+}
+
+static REALstring fbClassTransactionAccessMode(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db || !fbd->db->hasActiveTransaction()) return StdToReal("");
+
+    std::string value;
+    if (!fbd->db->transactionAccessMode(value)) return StdToReal("");
+    return StdToReal(value);
+}
+
+static RBInteger fbClassTransactionLockTimeout(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db || !fbd->db->hasActiveTransaction()) return -2;
+
+    long value = -1;
+    if (!fbd->db->transactionLockTimeout(value)) return -2;
+    return (RBInteger)value;
 }
 
 // ============================================================================
