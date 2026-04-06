@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `DisplayUsers`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -156,14 +156,15 @@ Lock-timeout semantics:
 - `0` = `NO WAIT`
 - `> 0` = wait for that many seconds
 
-## Services API: Backup, Restore, Statistics, and Validation
+## Services API: Backup, Restore, Statistics, Validation, and User Display
 
-Phase 06 adds a narrow operational surface over the Firebird service manager:
+Phases 06-09 add a narrow operational surface over the Firebird service manager:
 
 - `BackupDatabase(backupFile As String) As Boolean`
 - `RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean`
 - `DatabaseStatistics() As Boolean`
 - `ValidateDatabase() As Boolean`
+- `DisplayUsers() As Boolean`
 - `LastServiceOutput() As String`
 
 ```vb
@@ -189,6 +190,11 @@ If db.ValidateDatabase Then
   System.DebugLog("Validation complete")
   System.DebugLog(db.LastServiceOutput)
 End If
+
+If db.DisplayUsers Then
+  System.DebugLog("User display complete")
+  System.DebugLog(db.LastServiceOutput)
+End If
 ```
 
 Notes:
@@ -197,7 +203,8 @@ Notes:
 - the backup and restore paths must be valid from the Firebird server's point of view
 - `DatabaseStatistics()` runs Firebird database statistics for the currently connected database
 - `ValidateDatabase()` runs Firebird's online validation service for the currently connected database
-- `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, or validation operation
+- `DisplayUsers()` runs Firebird's read-only user display service action
+- `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, validation, or user-display operation
 
 ## PreparedStatement Type Binds
 

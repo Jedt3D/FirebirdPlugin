@@ -186,6 +186,7 @@ End
 		  TestServicesBackupRestore
 		  TestDatabaseStatistics
 		  TestValidateDatabase
+		  TestDisplayUsers
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1656,6 +1657,44 @@ End
 		    LogFail "Services database validation", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services database validation", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestDisplayUsers()
+		  Log "-- Test: Services display users --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.DisplayUsers Then
+		      LogPass "DisplayUsers"
+		    Else
+		      LogFail "DisplayUsers", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput
+		    If report.Trim <> "" Then
+		      LogPass "DisplayUsers service output"
+		    Else
+		      LogFail "DisplayUsers service output", "Expected user display output"
+		    End If
+		    
+		    If report.IndexOf("SYSDBA") >= 0 Then
+		      LogPass "DisplayUsers content"
+		    Else
+		      LogFail "DisplayUsers content", "Expected SYSDBA in displayed users"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services display users", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services display users", ex.Message
 		  End Try
 		  
 		  db.Close

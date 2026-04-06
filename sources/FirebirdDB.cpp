@@ -1346,6 +1346,49 @@ bool FBDatabase::validateDatabase() {
     return true;
 }
 
+bool FBDatabase::displayUsers() {
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200122, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200123, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_display_user);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200124, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    if (output.empty()) {
+        setError(-200125, "User display returned no output");
+        return false;
+    }
+
+    mServiceOutput = output;
+    return true;
+}
+
 void FBDatabase::captureError() {
     char buf[512];
     std::ostringstream oss;

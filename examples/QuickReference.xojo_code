@@ -138,6 +138,8 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var statsLog As String = db.LastServiceOutput
   Var validateOk As Boolean = db.ValidateDatabase
   Var validateLog As String = db.LastServiceOutput
+  Var usersOk As Boolean = db.DisplayUsers
+  Var usersLog As String = db.LastServiceOutput
 
   // Native Xojo DatabaseRow insert convenience
   Var row As New DatabaseRow

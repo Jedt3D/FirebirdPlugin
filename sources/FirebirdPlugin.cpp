@@ -64,6 +64,7 @@ static RBBoolean    fbClassBackupDatabase(REALobject instance, REALstring backup
 static RBBoolean    fbClassRestoreDatabase(REALobject instance, REALstring backupFile, REALstring targetDatabase, RBBoolean replaceExisting);
 static RBBoolean    fbClassDatabaseStatistics(REALobject instance);
 static RBBoolean    fbClassValidateDatabase(REALobject instance);
+static RBBoolean    fbClassDisplayUsers(REALobject instance);
 static REALstring   fbClassLastServiceOutput(REALobject instance);
 
 // Prepared statement class methods
@@ -183,6 +184,7 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassRestoreDatabase, REALnoImplementation, "RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDatabaseStatistics, REALnoImplementation, "DatabaseStatistics() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassValidateDatabase, REALnoImplementation, "ValidateDatabase() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassDisplayUsers, REALnoImplementation, "DisplayUsers() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassLastServiceOutput, REALnoImplementation, "LastServiceOutput() As String", REALconsoleSafe },
 };
 
@@ -1534,6 +1536,12 @@ static RBBoolean fbClassValidateDatabase(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->validateDatabase();
+}
+
+static RBBoolean fbClassDisplayUsers(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->displayUsers();
 }
 
 static REALstring fbClassLastServiceOutput(REALobject instance) {

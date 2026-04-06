@@ -363,7 +363,7 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
-// Example 11c: Services Backup / Restore / Statistics / Validation
+// Example 11c: Services Backup / Restore / Statistics / Validation / User Display
 // ---------------------------------------------------------------------------
 
 Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
@@ -398,6 +398,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog(db.LastServiceOutput)
     Else
       System.DebugLog("Validation error: " + db.ErrorMessage)
+    End If
+
+    If db.DisplayUsers Then
+      System.DebugLog("User display complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User display error: " + db.ErrorMessage)
     End If
   Catch err As RuntimeException
     System.DebugLog("Services error: " + err.Message)
