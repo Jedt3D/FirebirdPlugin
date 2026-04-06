@@ -140,6 +140,8 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var validateLog As String = db.LastServiceOutput
   Var sweepOk As Boolean = db.SweepDatabase
   Var sweepLog As String = db.LastServiceOutput
+  Var limboOk As Boolean = db.ListLimboTransactions
+  Var limboLog As String = db.LastServiceOutput
   Var usersOk As Boolean = db.DisplayUsers
   Var usersLog As String = db.LastServiceOutput
   Var addUserOk As Boolean = db.AddUser("QUICKREF_USER", "quickref_secret")

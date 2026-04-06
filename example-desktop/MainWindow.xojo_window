@@ -291,6 +291,7 @@ End
 		  TestDatabaseStatistics
 		  TestValidateDatabase
 		  TestSweepDatabase
+		  TestListLimboTransactions
 		  TestDisplayUsers
 		  TestAddDeleteUser
 		  TestChangeUserPassword
@@ -1810,6 +1811,40 @@ End
 		    LogFail "Services database sweep", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services database sweep", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestListLimboTransactions()
+		  Log "-- Test: Services list limbo transactions --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.ListLimboTransactions Then
+		      LogPass "ListLimboTransactions"
+		    Else
+		      LogFail "ListLimboTransactions", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput
+		    If report.Trim <> "" Then
+		      LogPass "ListLimboTransactions service output"
+		      LogPass "ListLimboTransactions content"
+		    Else
+		      LogPass "ListLimboTransactions service output: clean database produced no limbo output"
+		      LogPass "ListLimboTransactions content"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services list limbo transactions", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services list limbo transactions", ex.Message
 		  End Try
 		  
 		  db.Close

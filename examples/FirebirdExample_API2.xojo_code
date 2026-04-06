@@ -407,6 +407,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("Sweep error: " + db.ErrorMessage)
     End If
 
+    If db.ListLimboTransactions Then
+      System.DebugLog("Limbo transaction listing complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Limbo transaction listing error: " + db.ErrorMessage)
+    End If
+
     If db.DisplayUsers Then
       System.DebugLog("User display complete")
       System.DebugLog(db.LastServiceOutput)

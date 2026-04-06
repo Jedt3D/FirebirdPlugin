@@ -170,6 +170,7 @@ public:
     bool databaseStatistics();
     bool validateDatabase();
     bool sweepDatabase();
+    bool listLimboTransactions();
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
     bool changeUserPassword(const std::string &userName, const std::string &password);
