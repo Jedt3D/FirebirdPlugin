@@ -10,6 +10,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
 - `Database.AddRow(...)` support, including generated-key return for common identity-primary-key workflows
 - `AffectedRowCount` property for the last non-query execution path
+- Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
@@ -21,7 +22,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
   `INT128`, `DECFLOAT(16/34)`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE`
 - Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
 - Schema introspection: `TableSchema`, `FieldSchema`, `IndexSchema`
-- Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`
+- Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`, `WireCrypt`, `AuthClientPlugins`
 - Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN, plus Firebird 4/5/6 modern types via `StringValue`
 - Supports **remote** (client/server) and **embedded** (direct file) connections
 - Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64, arm64), **Linux** (x64)
@@ -37,6 +38,8 @@ db.DatabaseName = "/var/firebird/data/myapp.fdb"
 db.UserName = "SYSDBA"
 db.Password = "masterkey"
 db.CharacterSet = "UTF8"
+db.WireCrypt = "Required"        // optional: Disabled, Enabled, Required
+db.AuthClientPlugins = "Srp256,Srp"
 
 Try
   db.Connect
@@ -105,6 +108,39 @@ Notes:
 - `AffectedRowCount` is updated by `ExecuteSQL`, prepared `ExecuteSQL`, and native `AddRow`
 - `SelectSQL` does not clear the most recent non-query count
 - the property resets on connect/disconnect
+
+## Connection Security Options
+
+`FirebirdDatabase` exposes two Firebird-native connection-security properties:
+
+- `WireCrypt As String`
+- `AuthClientPlugins As String`
+
+```vb
+Var db As New FirebirdDatabase
+db.Host = "localhost"
+db.DatabaseName = "/var/firebird/data/myapp.fdb"
+db.UserName = "SYSDBA"
+db.Password = "masterkey"
+db.CharacterSet = "UTF8"
+db.WireCrypt = "Required"
+db.AuthClientPlugins = "Srp256,Srp"
+
+db.Connect
+```
+
+`WireCrypt` accepts:
+
+- `Disabled`
+- `Enabled`
+- `Required`
+
+Notes:
+
+- `WireCrypt` maps to Firebird's per-connection config override
+- `AuthClientPlugins` maps to Firebird's auth-plugin list clumplet
+- these properties apply to both ordinary remote attachments and service-manager control operations
+- this is intentionally Firebird-native, not a fake certificate-path API
 
 ## Firebird-Specific Metadata
 
@@ -258,6 +294,8 @@ controlDb.UserName = db.UserName
 controlDb.Password = db.Password
 controlDb.CharacterSet = db.CharacterSet
 controlDb.Role = db.Role
+controlDb.WireCrypt = db.WireCrypt
+controlDb.AuthClientPlugins = db.AuthClientPlugins
 
 If controlDb.ShutdownDenyNewAttachments(1) Then
   System.DebugLog("Database shutdown deny-new-attachments enabled")

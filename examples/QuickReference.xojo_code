@@ -93,6 +93,8 @@ End Sub
 // Password       String    ""        Authentication password
 // CharacterSet   String    "UTF8"    Connection character set
 // Role           String    ""        SQL role name
+// WireCrypt      String    ""        Firebird wire encryption: Disabled, Enabled, Required
+// AuthClientPlugins String ""        Firebird auth plugin list, for example "Srp256,Srp"
 // Dialect        Integer   3         SQL dialect (1 or 3; always use 3)
 
 
@@ -156,6 +158,8 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   serviceControlDb.Password = db.Password
   serviceControlDb.CharacterSet = db.CharacterSet
   serviceControlDb.Role = db.Role
+  serviceControlDb.WireCrypt = db.WireCrypt
+  serviceControlDb.AuthClientPlugins = db.AuthClientPlugins
   Var shutdownOk As Boolean = serviceControlDb.ShutdownDenyNewAttachments(1)
   Var shutdownLog As String = serviceControlDb.LastServiceOutput
   Var onlineOk As Boolean = serviceControlDb.BringDatabaseOnline
@@ -187,6 +191,19 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   rs = db.SelectSQL("SELECT id FROM customers WHERE id = ?", generatedId)
   rs.Close
   Var preservedAffectedRows As Int64 = db.AffectedRowCount
+
+  // Firebird-native connection-security controls
+  Var secureDb As New FirebirdDatabase
+  secureDb.Host = db.Host
+  secureDb.Port = db.Port
+  secureDb.DatabaseName = db.DatabaseName
+  secureDb.UserName = db.UserName
+  secureDb.Password = db.Password
+  secureDb.CharacterSet = db.CharacterSet
+  secureDb.WireCrypt = "Required"
+  secureDb.AuthClientPlugins = "Srp256,Srp"
+  Var secureConnectOk As Boolean = secureDb.Connect
+  secureDb.Close
 
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _

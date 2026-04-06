@@ -4,7 +4,7 @@ Last updated: April 7, 2026
 
 This draft was refreshed after pulling `main` at commit `78cbe85`, which includes the latest Windows FB5/FB6 build updates.
 
-Phase 19 closes the SSL/TLS feasibility spike and confirms the next implementation target should be Firebird-native connection-security controls, not a fake PostgreSQL certificate-property clone.
+Phase 20 closes the first connection-security implementation slice through `WireCrypt` and `AuthClientPlugins`.
 
 ## Goal
 
@@ -29,13 +29,14 @@ The Firebird plugin is already strong in:
 
 The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md) are:
 
-- SSL/TLS connection controls
+- PostgreSQL-style certificate and `SSLMode` controls
 - richer `RowSet` behavior
 - event/notification-style support
 - a dedicated BLOB object only if streaming use cases matter
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 19 closes the SSL/TLS feasibility spike.
+Phase 20 closes the first Firebird-native connection-security implementation slice.
 
 ## Decision Update From User Direction
 
@@ -215,14 +216,13 @@ This is the right long-term differentiator because Xojo's built-in drivers do no
 
 ## Best Recommended Order
 
-If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is:
+If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is now:
 
-1. implement `WireCrypt` and `AuthClientPlugins`
+1. improve `RowSet` capability where it creates a real PostgreSQL-visible parity gain
 2. add a limited `SSLMode` alias only if it improves ergonomics cleanly
-3. dedicated Firebird large-object / streaming BLOB design, modeled after PostgreSQL's large-object workflow
+3. design a dedicated Firebird large-object / streaming BLOB surface modeled on PostgreSQL's large-object workflow
 4. event/notification support only if Firebird's event model maps cleanly enough to a PostgreSQL-like Xojo surface
-5. `RowSet` improvements after the PostgreSQL-parity items above are settled
-6. then return to deeper Firebird-specific service/admin expansion
+5. then return to deeper Firebird-specific service/admin expansion
 
 ## What Not to Prioritize for Built-in Parity
 
@@ -245,8 +245,8 @@ The correct approach is:
 
 ### Wave 1: Immediate parity wins
 
-- implement `WireCrypt`
-- implement `AuthClientPlugins`
+- complete Firebird-native `WireCrypt`
+- complete `AuthClientPlugins`
 - PostgreSQL large-object parity investigation
 
 Expected value:
@@ -255,7 +255,7 @@ Expected value:
 
 ### Wave 2: Structural parity work
 
-- implement SSL/TLS only if the design spike succeeds
+- add a limited `SSLMode` alias only if the ergonomics win is real
 - implement a dedicated Firebird large-object / streaming BLOB surface only if the Firebird mapping is clean and the use case is real
 
 Expected value:
@@ -315,7 +315,8 @@ These are the questions I need you to answer before implementation starts:
 Using `PostgreSQLDatabase` as the gold standard implies these practical targets:
 
 - `AffectedRowCount` parity is complete in Phase 18
-- Firebird security parity is only partial: `SSLMode` can map narrowly, but certificate-path properties are not yet justified by the official Firebird connection model
+- Firebird security parity is partially complete in Phase 20 through `WireCrypt` and `AuthClientPlugins`
+- `SSLMode` can still map narrowly, but certificate-path properties are not yet justified by the official Firebird connection model
 - large-object support should look more like `CreateLargeObject`, `OpenLargeObject`, `DeleteLargeObject`, plus a dedicated object for `Read`, `Write`, `Seek`, and `Tell`
 - event support should aim for a Xojo-style pattern similar to:
   - `Listen`
@@ -334,13 +335,11 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. implement `WireCrypt`
-2. implement `AuthClientPlugins`
-3. add a limited `SSLMode` alias only if it stays honest and clearly documented
-4. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
-5. defer event support until after that unless a real application need appears immediately
-6. treat `RowSet` enhancement as a secondary polish track unless it exposes a concrete PostgreSQL-parity gap
-7. then continue expanding Firebird's distinctive admin/service strengths
+1. improve `RowSet` read-navigation behavior to the level users expect from a first-class Xojo driver
+2. add a limited `SSLMode` alias only if it stays honest and clearly documented
+3. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
+4. defer event support until after that unless a real application need appears immediately
+5. then continue expanding Firebird's distinctive admin/service strengths
 
 Why this is best:
 
@@ -353,12 +352,12 @@ Why this is best:
 
 Default recommended next step:
 
-- implement `WireCrypt`
+- improve `RowSet` capability
 
 Default recommended second step:
 
-- implement `AuthClientPlugins`
+- add a limited `SSLMode` alias only if it improves ergonomics cleanly
 
 Default recommended third step:
 
-- add a limited `SSLMode` alias only if the ergonomics win is worth it
+- design a dedicated Firebird large-object / streaming BLOB surface

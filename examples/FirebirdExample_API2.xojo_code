@@ -28,6 +28,8 @@ Sub ConnectToRemoteServer()
   db.Password = "masterkey"
   db.CharacterSet = "UTF8"          // default, can omit
   db.Dialect = 3                    // default, can omit
+  db.WireCrypt = "Required"         // optional: Disabled, Enabled, Required
+  db.AuthClientPlugins = "Srp256,Srp"
 
   Try
     db.Connect
@@ -38,6 +40,38 @@ Sub ConnectToRemoteServer()
     db.Close
   Catch err As DatabaseException
     System.DebugLog("Connection failed: " + err.Message)
+  End Try
+End Sub
+
+
+// ---------------------------------------------------------------------------
+// Example 1b: Remote Connection With Firebird-Native Security Controls
+// ---------------------------------------------------------------------------
+
+Sub ConnectWithWireCrypt()
+  Var db As New FirebirdDatabase
+
+  db.Host = "localhost"
+  db.Port = 3050
+  db.DatabaseName = "/var/firebird/data/myapp.fdb"
+  db.UserName = "SYSDBA"
+  db.Password = "masterkey"
+  db.CharacterSet = "UTF8"
+  db.WireCrypt = "Required"
+  db.AuthClientPlugins = "Srp256,Srp"
+
+  Try
+    db.Connect
+
+    Var rs As RowSet = db.SelectSQL("SELECT RDB$GET_CONTEXT('SYSTEM', 'WIRE_ENCRYPTED') AS WIRE_ENCRYPTED FROM RDB$DATABASE")
+    If rs <> Nil And Not rs.AfterLastRow Then
+      System.DebugLog("WIRE_ENCRYPTED = " + rs.Column("WIRE_ENCRYPTED").StringValue)
+      rs.Close
+    End If
+
+    db.Close
+  Catch err As DatabaseException
+    System.DebugLog("Secure connection failed: " + err.Message)
   End Try
 End Sub
 

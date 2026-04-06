@@ -38,7 +38,7 @@ It is also stronger than Xojo's built-in drivers in one important area: Firebird
 
 The main areas where it still trails the built-ins are:
 
-- no SSL/TLS connection surface like MySQL/PostgreSQL
+- no PostgreSQL-style certificate-path SSL/TLS surface
 - no PostgreSQL-style notifications or large-object class
 - no SQLite-style local-engine utilities such as `BackUp`, `CreateBlob`, `OpenBlob`, encryption, attached databases, or WAL controls
 - a thinner `RowSet` implementation than SQLite
@@ -107,6 +107,8 @@ The Firebird prepared-statement layer is stronger than "minimum parity". It is e
 These methods are not part of the standard Xojo `Database` API and represent plugin-added Firebird-specific surface:
 
 - `AffectedRowCount() As Int64`
+- `WireCrypt As String`
+- `AuthClientPlugins As String`
 - `ServerVersion() As String`
 - `PageSize() As Integer`
 - `DatabaseSQLDialect() As Integer`
@@ -157,7 +159,7 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 Technical impact:
 
 - MySQL has a stronger public connection-security surface
-- Firebird currently has no public SSL/TLS connection API
+- Firebird now has a smaller Firebird-native connection-security API through `WireCrypt` and `AuthClientPlugins`, but it still does not match MySQL's certificate and cipher controls
 
 ### PostgreSQLDatabase
 
@@ -367,7 +369,7 @@ The Firebird plugin is already on par for:
 
 The Firebird plugin is still behind the built-ins in:
 
-- connection SSL/TLS controls
+- PostgreSQL-style certificate and SSL-mode controls
 - PostgreSQL notifications
 - PostgreSQL large objects
 - SQLite backup/blob/encryption/attachment/WAL tooling
@@ -386,12 +388,13 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Add SSL/TLS connection options if Firebird client/server configuration allows it cleanly
-2. Improve `RowSet` capability only where it creates a real built-in-driver parity gain
-3. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
-4. Consider a dedicated Firebird BLOB object only if streaming use cases appear often
+1. Improve `RowSet` capability only where it creates a real built-in-driver parity gain
+2. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+3. Consider a dedicated Firebird BLOB object only if streaming use cases appear often
+4. Decide whether a limited `SSLMode` alias over `WireCrypt` is worth exposing
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
+Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 
