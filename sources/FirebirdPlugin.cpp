@@ -64,6 +64,7 @@ static RBBoolean    fbClassBackupDatabase(REALobject instance, REALstring backup
 static RBBoolean    fbClassRestoreDatabase(REALobject instance, REALstring backupFile, REALstring targetDatabase, RBBoolean replaceExisting);
 static RBBoolean    fbClassDatabaseStatistics(REALobject instance);
 static RBBoolean    fbClassValidateDatabase(REALobject instance);
+static RBBoolean    fbClassSweepDatabase(REALobject instance);
 static RBBoolean    fbClassDisplayUsers(REALobject instance);
 static RBBoolean    fbClassAddUser(REALobject instance, REALstring userName, REALstring password);
 static RBBoolean    fbClassChangeUserPassword(REALobject instance, REALstring userName, REALstring password);
@@ -189,6 +190,7 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassRestoreDatabase, REALnoImplementation, "RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDatabaseStatistics, REALnoImplementation, "DatabaseStatistics() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassValidateDatabase, REALnoImplementation, "ValidateDatabase() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassSweepDatabase, REALnoImplementation, "SweepDatabase() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDisplayUsers, REALnoImplementation, "DisplayUsers() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassAddUser, REALnoImplementation, "AddUser(userName As String, password As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassChangeUserPassword, REALnoImplementation, "ChangeUserPassword(userName As String, password As String) As Boolean", REALconsoleSafe },
@@ -1546,6 +1548,12 @@ static RBBoolean fbClassValidateDatabase(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->validateDatabase();
+}
+
+static RBBoolean fbClassSweepDatabase(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->sweepDatabase();
 }
 
 static RBBoolean fbClassDisplayUsers(REALobject instance) {

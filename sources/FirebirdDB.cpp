@@ -1352,6 +1352,54 @@ bool FBDatabase::validateDatabase() {
     return true;
 }
 
+bool FBDatabase::sweepDatabase() {
+    if (mDatabasePath.empty()) {
+        setError(-200148, "Database path is unavailable for sweep");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200149, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200150, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options, isc_spb_rpr_sweep_db);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200151, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
 bool FBDatabase::displayUsers() {
     auto &utilities = GetFirebirdUtilities();
     FirebirdStatusScope status;

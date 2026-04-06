@@ -400,6 +400,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("Validation error: " + db.ErrorMessage)
     End If
 
+    If db.SweepDatabase Then
+      System.DebugLog("Sweep complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Sweep error: " + db.ErrorMessage)
+    End If
+
     If db.DisplayUsers Then
       System.DebugLog("User display complete")
       System.DebugLog(db.LastServiceOutput)

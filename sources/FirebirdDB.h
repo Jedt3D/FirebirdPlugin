@@ -169,6 +169,7 @@ public:
     bool restoreDatabase(const std::string &backupFile, const std::string &targetDatabase, bool replaceExisting);
     bool databaseStatistics();
     bool validateDatabase();
+    bool sweepDatabase();
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
     bool changeUserPassword(const std::string &userName, const std::string &password);

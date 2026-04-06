@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -164,6 +164,7 @@ Phases 06-11 add a narrow operational surface over the Firebird service manager:
 - `RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean`
 - `DatabaseStatistics() As Boolean`
 - `ValidateDatabase() As Boolean`
+- `SweepDatabase() As Boolean`
 - `DisplayUsers() As Boolean`
 - `AddUser(userName As String, password As String) As Boolean`
 - `ChangeUserPassword(userName As String, password As String) As Boolean`
@@ -193,6 +194,11 @@ End If
 
 If db.ValidateDatabase Then
   System.DebugLog("Validation complete")
+  System.DebugLog(db.LastServiceOutput)
+End If
+
+If db.SweepDatabase Then
+  System.DebugLog("Sweep complete")
   System.DebugLog(db.LastServiceOutput)
 End If
 
@@ -233,9 +239,11 @@ Notes:
 - the backup and restore paths must be valid from the Firebird server's point of view
 - `DatabaseStatistics()` runs Firebird database statistics for the currently connected database
 - `ValidateDatabase()` runs Firebird's online validation service for the currently connected database
+- `SweepDatabase()` runs Firebird's service-manager sweep action for the currently connected database
 - `DisplayUsers()` runs Firebird's read-only user display service action
 - `AddUser()`, `ChangeUserPassword()`, `SetUserAdmin()`, `UpdateUserNames()`, and `DeleteUser()` run Firebird's security service actions for user mutation
 - `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, validation, user-display, or user-mutation operation
+- some service actions, including sweep, may succeed without emitting verbose output
 - authoritative verification for admin/name mutation is best done through login behavior or `SEC$USERS`, not by scraping formatted `DisplayUsers()` text
 
 ## PreparedStatement Type Binds

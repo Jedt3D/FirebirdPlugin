@@ -290,6 +290,7 @@ End
 		  TestServicesBackupRestore
 		  TestDatabaseStatistics
 		  TestValidateDatabase
+		  TestSweepDatabase
 		  TestDisplayUsers
 		  TestAddDeleteUser
 		  TestChangeUserPassword
@@ -1765,6 +1766,50 @@ End
 		    LogFail "Services database validation", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services database validation", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestSweepDatabase()
+		  Log "-- Test: Services database sweep --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.SweepDatabase Then
+		      LogPass "SweepDatabase"
+		    Else
+		      LogFail "SweepDatabase", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput
+		    If report.Trim <> "" Then
+		      LogPass "SweepDatabase service output"
+		    Else
+		      LogPass "SweepDatabase service output: sweep produced no verbose output"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT COUNT(*) AS C FROM artists")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      If rs.Column("C").IntegerValue = 13 Then
+		        LogPass "SweepDatabase readback"
+		      Else
+		        LogFail "SweepDatabase readback", "Unexpected artist count after sweep"
+		      End If
+		      rs.Close
+		    Else
+		      LogFail "SweepDatabase readback", "No rows returned after sweep"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services database sweep", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services database sweep", ex.Message
 		  End Try
 		  
 		  db.Close
