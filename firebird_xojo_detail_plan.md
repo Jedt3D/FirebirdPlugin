@@ -254,7 +254,7 @@ This table tracks implementation progress against the plan through the currently
 | 06 | Services API backup and restore slice | Complete | `107 passed, 0 failed` | `feature/phase-06` | `9910e8c` | `phase_06_article.md` |
 | 07 | Services API database statistics slice | Complete | `110 passed, 0 failed` | `feature/phase-07` | `66d6c00` | `phase_07_article.md` |
 | 08 | Services API online validation slice | Complete | `113 passed, 0 failed` | `feature/phase-08` | `303fa7c` | `phase_08_article.md` |
-| 09 | Services API read-only user display slice | Complete | `116 passed, 0 failed` | `feature/phase-09` | pending | `phase_09_article.md` |
+| 09 | Services API read-only user display slice | Complete | `116 passed, 0 failed` | `feature/phase-09` | `8cec51e` | `phase_09_article.md` |
 
 ## Current Xojo Feature Snapshot
 
