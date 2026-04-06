@@ -264,7 +264,7 @@ This table tracks implementation progress against the plan through the currently
 | 16 | Services API limbo-recovery slice | Complete | `149 passed, 0 failed` | `feature/phase-16` | `4311cc4` | `phase_16_article.md` |
 | 17 | Services API shutdown / online control slice | Complete | `157 passed, 0 failed` | `feature/phase-17` | `924d213` | `phase_17_article.md` |
 | 18 | built-in-parity affected-row reporting slice | Complete | `162 passed, 0 failed` | `feature/phase-18` | `83b4baa` | `phase_18_article.md` |
-| 19 | SSL/TLS feasibility and API design spike | Complete | design spike complete | `feature/phase-19` | `1d0a36c` | `phase_19_article.md` |
+| 19 | SSL/TLS feasibility and API design spike | Complete | design spike complete | `feature/phase-19` | `b681d5f` | `phase_19_article.md` |
 
 ## Current Xojo Feature Snapshot
 
