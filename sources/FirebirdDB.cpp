@@ -8,10 +8,9 @@
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <firebird/Interface.h>
 
-extern "C" {
-#include <firebird/fb_c_api.h>
-}
+using namespace Firebird;
 
 namespace {
 

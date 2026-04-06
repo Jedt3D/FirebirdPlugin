@@ -299,10 +299,10 @@ Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
 if ($dllPath) {
     $size = [math]::Round($dllPath.Length / 1KB, 1)
-    Write-Host "  Output: $($dllPath.FullName) ($size KB)" -ForegroundColor White
+    Write-Host "  Output: $($dllPath.FullName) ($($size) KB)" -ForegroundColor White
 }
 Write-Host "  Plugin staged at: $pluginDir" -ForegroundColor White
 Write-Host ""
 Write-Host "  To package as .xojo_plugin, run from the plugin dir:" -ForegroundColor DarkGray
-Write-Host "    Compress-Archive -Path '$pluginDir\*' -DestinationPath '$PluginName.xojo_plugin'" -ForegroundColor DarkGray
+Write-Host "    Compress-Archive -Path '$pluginDir\*' -DestinationPath '$($PluginName).xojo_plugin'" -ForegroundColor DarkGray
 Write-Host ""

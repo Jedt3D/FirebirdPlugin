@@ -90,6 +90,7 @@ add_library(${PLUGIN_NAME} SHARED ${SOURCES})
 target_include_directories(${PLUGIN_NAME} PRIVATE
     sdk/Includes
     ${FB_INCLUDE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
 )
 
 target_compile_definitions(${PLUGIN_NAME} PRIVATE ${PLATFORM_DEFINES})
