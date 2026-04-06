@@ -363,6 +363,35 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 11c: Services Backup / Restore
+// ---------------------------------------------------------------------------
+
+Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
+  Try
+    Var backupPath As String = SpecialFolder.Temporary.Child("example_backup.fbk").NativePath
+    Var restorePath As String = SpecialFolder.Temporary.Child("example_restore.fdb").NativePath
+
+    If db.BackupDatabase(backupPath) Then
+      System.DebugLog("Backup complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Backup error: " + db.ErrorMessage)
+      Return
+    End If
+
+    If db.RestoreDatabase(backupPath, restorePath, True) Then
+      System.DebugLog("Restore complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Restore error: " + db.ErrorMessage)
+    End If
+  Catch err As RuntimeException
+    System.DebugLog("Services error: " + err.Message)
+  End Try
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 12: Date/Time Handling
 // ---------------------------------------------------------------------------
 

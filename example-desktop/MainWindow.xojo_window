@@ -183,6 +183,7 @@ End
 		  TestTimestampWithTimeZoneRoundTrip
 		  TestDatabaseAddRow
 		  TestDatabaseAddRowWithReturnValue
+		  TestServicesBackupRestore
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1460,6 +1461,117 @@ End
 		    LogFail "Database.AddRow with return value", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Database.AddRow with return value", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestServicesBackupRestore()
+		  Log "-- Test: Services backup / restore --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var tempFolder As FolderItem = SpecialFolder.Temporary
+		  If tempFolder = Nil Then
+		    LogFail "Services backup / restore", "Temporary folder is unavailable"
+		    db.Close
+		    Return
+		  End If
+		  
+		  Var backupFile As FolderItem = tempFolder.Child("firebirdplugin_phase06_test.fbk")
+		  Var restoreFile As FolderItem = tempFolder.Child("firebirdplugin_phase06_restore.fdb")
+		  
+		  Try
+		    If backupFile.Exists Then backupFile.Remove
+		  Catch ex As IOException
+		  End Try
+		  
+		  Try
+		    If restoreFile.Exists Then restoreFile.Remove
+		  Catch ex As IOException
+		  End Try
+		  
+		  Try
+		    If db.BackupDatabase(backupFile.NativePath) Then
+		      LogPass "BackupDatabase"
+		    Else
+		      LogFail "BackupDatabase", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If backupFile.Exists Then
+		      LogPass "BackupDatabase file created"
+		    Else
+		      LogFail "BackupDatabase file created", backupFile.NativePath
+		    End If
+		    
+		    If db.LastServiceOutput.Trim <> "" Then
+		      LogPass "BackupDatabase service output"
+		    Else
+		      LogFail "BackupDatabase service output", "Expected gbak output"
+		    End If
+		    
+		    If db.RestoreDatabase(backupFile.NativePath, restoreFile.NativePath, True) Then
+		      LogPass "RestoreDatabase"
+		    Else
+		      LogFail "RestoreDatabase", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If restoreFile.Exists Then
+		      LogPass "RestoreDatabase file created"
+		    Else
+		      LogFail "RestoreDatabase file created", restoreFile.NativePath
+		    End If
+		    
+		    If db.LastServiceOutput.Trim <> "" Then
+		      LogPass "RestoreDatabase service output"
+		    Else
+		      LogFail "RestoreDatabase service output", "Expected gbak output"
+		    End If
+		    
+		    Var restored As New FirebirdDatabase
+		    restored.Host = "localhost"
+		    restored.DatabaseName = restoreFile.NativePath
+		    restored.UserName = "SYSDBA"
+		    restored.Password = "masterkey"
+		    restored.CharacterSet = "UTF8"
+		    
+		    If restored.Connect Then
+		      Var rs As RowSet = restored.SelectSQL("SELECT COUNT(*) AS cnt FROM artists")
+		      If rs <> Nil And Not rs.AfterLastRow Then
+		        If rs.Column("cnt").IntegerValue = 13 Then
+		          LogPass "RestoreDatabase readback"
+		        Else
+		          LogFail "RestoreDatabase readback", "Unexpected artist count"
+		        End If
+		        rs.Close
+		      Else
+		        LogFail "RestoreDatabase readback", "No rows returned"
+		      End If
+		      restored.Close
+		    Else
+		      LogFail "RestoreDatabase connect", restored.ErrorMessage
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services backup / restore", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services backup / restore", ex.Message
+		  End Try
+		  
+		  Try
+		    If backupFile.Exists Then backupFile.Remove
+		  Catch ex As IOException
+		  End Try
+		  
+		  Try
+		    If restoreFile.Exists Then restoreFile.Remove
+		  Catch ex As IOException
 		  End Try
 		  
 		  db.Close

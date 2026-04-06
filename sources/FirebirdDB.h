@@ -125,7 +125,10 @@ public:
                  const std::string &password,
                  const std::string &charset = "UTF8",
                  const std::string &role = "",
-                 int dialect = 3);
+                 int dialect = 3,
+                 const std::string &host = "",
+                 int port = 3050,
+                 const std::string &databasePath = "");
     void disconnect();
     bool isConnected() const { return mConnected; }
 
@@ -161,6 +164,11 @@ public:
     bool transactionAccessMode(std::string &out);
     bool transactionLockTimeout(long &out);
 
+    // Services API helpers
+    bool backupDatabase(const std::string &backupFile);
+    bool restoreDatabase(const std::string &backupFile, const std::string &targetDatabase, bool replaceExisting);
+    const std::string &lastServiceOutput() const { return mServiceOutput; }
+
     // Error state
     long lastErrorCode() const { return mErrorCode; }
     const std::string &lastErrorString() const { return mErrorMsg; }
@@ -181,6 +189,7 @@ public:
 private:
     bool databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
     bool transactionInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
+    bool runServiceRequest(const std::vector<char> &request, std::string &output);
     const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();
@@ -190,7 +199,14 @@ private:
     ISC_STATUS_ARRAY mStatus = {};
     bool            mConnected = false;
     int             mDialect = 3;
+    int             mPort = 3050;
     std::string     mCharset = "UTF8";
+    std::string     mHost;
+    std::string     mDatabasePath;
+    std::string     mUser;
+    std::string     mPassword;
+    std::string     mRole;
+    std::string     mServiceOutput;
     long            mErrorCode = 0;
     std::string     mErrorMsg;
 

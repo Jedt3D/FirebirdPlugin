@@ -60,6 +60,9 @@ static REALstring   fbClassTransactionIsolation(REALobject instance);
 static REALstring   fbClassTransactionAccessMode(REALobject instance);
 static RBInteger    fbClassTransactionLockTimeout(REALobject instance);
 static RBBoolean    fbClassBeginTransactionWithOptions(REALobject instance, REALstring isolation, RBBoolean readOnly, RBInteger lockTimeout);
+static RBBoolean    fbClassBackupDatabase(REALobject instance, REALstring backupFile);
+static RBBoolean    fbClassRestoreDatabase(REALobject instance, REALstring backupFile, REALstring targetDatabase, RBBoolean replaceExisting);
+static REALstring   fbClassLastServiceOutput(REALobject instance);
 
 // Prepared statement class methods
 static void         fbPrepStmtConstructor(REALobject instance);
@@ -174,6 +177,9 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassTransactionAccessMode, REALnoImplementation, "TransactionAccessMode() As String", REALconsoleSafe },
     { (REALproc)fbClassTransactionLockTimeout, REALnoImplementation, "TransactionLockTimeout() As Integer", REALconsoleSafe },
     { (REALproc)fbClassBeginTransactionWithOptions, REALnoImplementation, "BeginTransactionWithOptions(isolation As String, readOnly As Boolean, lockTimeout As Integer) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassBackupDatabase, REALnoImplementation, "BackupDatabase(backupFile As String) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassRestoreDatabase, REALnoImplementation, "RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassLastServiceOutput, REALnoImplementation, "LastServiceOutput() As String", REALconsoleSafe },
 };
 
 static REALclassDefinition sFirebirdDatabaseClass = {
@@ -1382,7 +1388,8 @@ static RBBoolean fbClassConnect(REALobject instance) {
     }
 
     auto *fb = new FBDatabase();
-    if (!fb->connect(connStr, user, pass, charset, role, data->dialect)) {
+    if (!fb->connect(connStr, user, pass, charset, role, data->dialect,
+                     host, data->port, dbName)) {
         delete fb;
         return false;
     }
@@ -1499,6 +1506,24 @@ static RBBoolean fbClassBeginTransactionWithOptions(REALobject instance, REALstr
 
     fbd->autoCommit = false;
     return true;
+}
+
+static RBBoolean fbClassBackupDatabase(REALobject instance, REALstring backupFile) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->backupDatabase(RealToStd(backupFile));
+}
+
+static RBBoolean fbClassRestoreDatabase(REALobject instance, REALstring backupFile, REALstring targetDatabase, RBBoolean replaceExisting) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->restoreDatabase(RealToStd(backupFile), RealToStd(targetDatabase), replaceExisting != 0);
+}
+
+static REALstring fbClassLastServiceOutput(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return StdToReal("");
+    return StdToReal(fbd->db->lastServiceOutput());
 }
 
 // ============================================================================

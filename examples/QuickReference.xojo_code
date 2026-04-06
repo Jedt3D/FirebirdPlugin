@@ -127,6 +127,14 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
     Var beginError As String = db.ErrorMessage
   End If
 
+  // Services API first slice
+  Var backupPath As String = SpecialFolder.Temporary.Child("firebird_quickref.fbk").NativePath
+  Var restorePath As String = SpecialFolder.Temporary.Child("firebird_quickref_restore.fdb").NativePath
+  Var backupOk As Boolean = db.BackupDatabase(backupPath)
+  Var backupLog As String = db.LastServiceOutput
+  Var restoreOk As Boolean = db.RestoreDatabase(backupPath, restorePath, True)
+  Var restoreLog As String = db.LastServiceOutput
+
   // Native Xojo DatabaseRow insert convenience
   Var row As New DatabaseRow
   row.Column("Name") = "GeneratedFromAddRow"

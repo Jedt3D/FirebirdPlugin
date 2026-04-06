@@ -484,6 +484,94 @@ void AppendInt32LE(std::vector<unsigned char> &bytes, long value) {
     bytes.push_back((unsigned char)((value >> 24) & 0xFF));
 }
 
+void AppendUInt16LE(std::vector<char> &bytes, uint16_t value) {
+    bytes.push_back((char)(value & 0xFF));
+    bytes.push_back((char)((value >> 8) & 0xFF));
+}
+
+void AppendUInt32LE(std::vector<char> &bytes, uint32_t value) {
+    bytes.push_back((char)(value & 0xFF));
+    bytes.push_back((char)((value >> 8) & 0xFF));
+    bytes.push_back((char)((value >> 16) & 0xFF));
+    bytes.push_back((char)((value >> 24) & 0xFF));
+}
+
+void AppendAttachStringClumplet(std::vector<char> &bytes, unsigned char item, const std::string &value) {
+    bytes.push_back((char)item);
+    bytes.push_back((char)value.size());
+    bytes.insert(bytes.end(), value.begin(), value.end());
+}
+
+void AppendServiceStringClumplet(std::vector<char> &bytes, unsigned char item, const std::string &value) {
+    bytes.push_back((char)item);
+    AppendUInt16LE(bytes, (uint16_t)value.size());
+    bytes.insert(bytes.end(), value.begin(), value.end());
+}
+
+void AppendServiceIntClumplet(std::vector<char> &bytes, unsigned char item, uint32_t value) {
+    bytes.push_back((char)item);
+    AppendUInt16LE(bytes, 4);
+    AppendUInt32LE(bytes, value);
+}
+
+std::string BuildServiceManagerName(const std::string &host, int port) {
+    if (host.empty()) return "service_mgr";
+
+    std::string result = host;
+    if (port > 0 && port != 3050) {
+        result += "/" + std::to_string(port);
+    }
+    result += ":service_mgr";
+    return result;
+}
+
+bool CollectServiceQueryResult(const std::vector<char> &result, std::string &output, bool &keepPolling) {
+    keepPolling = false;
+    size_t pos = 0;
+
+    while (pos < result.size()) {
+        unsigned char item = (unsigned char)result[pos++];
+        switch (item) {
+            case isc_info_end:
+                return true;
+
+            case isc_info_truncated:
+            case isc_info_svc_timeout:
+            case isc_info_data_not_ready:
+                keepPolling = true;
+                break;
+
+            case isc_info_svc_line: {
+                if (pos + 2 > result.size()) return false;
+                uint16_t len = (uint16_t)isc_vax_integer(&result[pos], 2);
+                pos += 2;
+                if (pos + len > result.size()) return false;
+                if (len > 0) {
+                    output.append(&result[pos], &result[pos + len]);
+                    output.push_back('\n');
+                    keepPolling = true;
+                }
+                pos += len;
+                break;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    return true;
+}
+
+std::string FormatInterfaceStatus(IStatus *status) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!status || !utilities.util) return "Firebird interface error";
+
+    std::array<char, 1024> buffer = {};
+    IUtil_formatStatus(utilities.util, buffer.data(), (unsigned)buffer.size(), status);
+    return std::string(buffer.data());
+}
+
 } // namespace
 
 // ============================================================================
@@ -501,12 +589,22 @@ bool FBDatabase::connect(const std::string &database,
                          const std::string &password,
                          const std::string &charset,
                          const std::string &role,
-                         int dialect)
+                         int dialect,
+                         const std::string &host,
+                         int port,
+                         const std::string &databasePath)
 {
     if (mConnected) disconnect();
     clearError();
     mDialect = dialect;
     mCharset = charset.empty() ? "UTF8" : charset;
+    mHost = host;
+    mPort = port > 0 ? port : 3050;
+    mDatabasePath = databasePath.empty() ? database : databasePath;
+    mUser = user;
+    mPassword = password;
+    mRole = role;
+    mServiceOutput.clear();
 
     // Build DPB
     char dpb[512];
@@ -769,6 +867,76 @@ bool FBDatabase::transactionInfo(const unsigned char *items, short itemLen, std:
     return true;
 }
 
+bool FBDatabase::runServiceRequest(const std::vector<char> &request, std::string &output) {
+    if (!mConnected) {
+        setError(-200101, "Database is not connected");
+        return false;
+    }
+    if (mUser.empty()) {
+        setError(-200102, "Service manager requires a user name");
+        return false;
+    }
+
+    clearError();
+    output.clear();
+
+    isc_svc_handle service = 0;
+    std::vector<char> attachSpb;
+    attachSpb.push_back((char)isc_spb_version1);
+    AppendAttachStringClumplet(attachSpb, isc_spb_user_name, mUser);
+    if (!mPassword.empty()) {
+        AppendAttachStringClumplet(attachSpb, isc_spb_password, mPassword);
+    }
+#ifdef isc_spb_expected_db
+    if (!mDatabasePath.empty()) {
+        AppendAttachStringClumplet(attachSpb, isc_spb_expected_db, mDatabasePath);
+    }
+#endif
+
+    const std::string serviceName = BuildServiceManagerName(mHost, mPort);
+    if (isc_service_attach(mStatus, 0, serviceName.c_str(), &service,
+                           (unsigned short)attachSpb.size(), attachSpb.data())) {
+        captureError();
+        return false;
+    }
+
+    bool ok = true;
+    if (isc_service_start(mStatus, &service, nullptr, (unsigned short)request.size(),
+                          const_cast<char *>(request.data()))) {
+        captureError();
+        ok = false;
+    } else {
+        const unsigned char receiveItems[] = { isc_info_svc_line };
+        std::vector<char> result(1024, 0);
+
+        for (;;) {
+            if (isc_service_query(mStatus, &service, nullptr, 0, nullptr,
+                                  (unsigned short)sizeof(receiveItems),
+                                  reinterpret_cast<const char *>(receiveItems),
+                                  (unsigned short)result.size(), result.data())) {
+                captureError();
+                ok = false;
+                break;
+            }
+
+            bool keepPolling = false;
+            if (!CollectServiceQueryResult(result, output, keepPolling)) {
+                setError(-200103, "Unexpected service manager response");
+                ok = false;
+                break;
+            }
+            if (!keepPolling) break;
+        }
+    }
+
+    ISC_STATUS_ARRAY detachStatus = {};
+    if (service) {
+        isc_service_detach(detachStatus, &service);
+    }
+
+    return ok;
+}
+
 const char *FBDatabase::findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const {
     len = 0;
     size_t pos = 0;
@@ -971,6 +1139,114 @@ bool FBDatabase::transactionLockTimeout(long &out) {
     if (!value || len <= 0) return false;
 
     out = (long)isc_portable_integer(reinterpret_cast<const ISC_UCHAR *>(value), len);
+    return true;
+}
+
+bool FBDatabase::backupDatabase(const std::string &backupFile) {
+    if (backupFile.empty()) {
+        setError(-200104, "Backup file path is required");
+        return false;
+    }
+    if (mDatabasePath.empty()) {
+        setError(-200105, "Database path is unavailable for backup");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200108, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200109, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_backup);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_bkp_file, backupFile.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertTag(builder, status.get(), isc_spb_verbose);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200110, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
+bool FBDatabase::restoreDatabase(const std::string &backupFile, const std::string &targetDatabase, bool replaceExisting) {
+    if (backupFile.empty()) {
+        setError(-200106, "Backup file path is required");
+        return false;
+    }
+    if (targetDatabase.empty()) {
+        setError(-200107, "Target database path is required");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200111, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200112, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_restore);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_bkp_file, backupFile.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, targetDatabase.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options,
+                          replaceExisting ? isc_spb_res_replace : isc_spb_res_create);
+    IXpbBuilder_insertTag(builder, status.get(), isc_spb_verbose);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200113, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
     return true;
 }
 
