@@ -145,6 +145,25 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 4c: Affected Row Count
+// ---------------------------------------------------------------------------
+
+Sub ShowAffectedRowCount(db As FirebirdDatabase)
+  Try
+    db.ExecuteSQL("UPDATE customers SET active = ? WHERE email = ?", True, "alice@example.com")
+    System.DebugLog("Rows updated: " + db.AffectedRowCount.ToString)
+
+    Var rs As RowSet = db.SelectSQL("SELECT COUNT(*) AS total_customers FROM customers")
+    rs.Close
+
+    System.DebugLog("Last non-query affected rows: " + db.AffectedRowCount.ToString)
+  Catch err As DatabaseException
+    System.DebugLog("AffectedRowCount error: " + err.Message)
+  End Try
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 5: Query Data with SelectSQL
 // ---------------------------------------------------------------------------
 

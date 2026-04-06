@@ -1,6 +1,6 @@
 # Firebird vs Xojo Built-in Database Drivers
 
-Last updated: April 6, 2026
+Last updated: April 7, 2026
 
 ## Scope
 
@@ -28,6 +28,7 @@ The Firebird plugin is already on par with Xojo's MySQL and PostgreSQL drivers f
 - connect
 - `SelectSQL`
 - `ExecuteSQL`
+- `AffectedRowCount`
 - `Prepare`
 - `AddRow`
 - explicit transactions
@@ -105,6 +106,7 @@ The Firebird prepared-statement layer is stronger than "minimum parity". It is e
 
 These methods are not part of the standard Xojo `Database` API and represent plugin-added Firebird-specific surface:
 
+- `AffectedRowCount() As Int64`
 - `ServerVersion() As String`
 - `PageSize() As Integer`
 - `DatabaseSQLDialect() As Integer`
@@ -143,7 +145,6 @@ This is the single biggest area where the Firebird plugin is ahead of Xojo's bui
 
 Public features in the Xojo docs that the Firebird plugin does not currently mirror:
 
-- `AffectedRowCount`
 - `SecureAuth`
 - `SSLEnabled`
 - `SSLKey`
@@ -157,7 +158,6 @@ Technical impact:
 
 - MySQL has a stronger public connection-security surface
 - Firebird currently has no public SSL/TLS connection API
-- Firebird also has no `AffectedRowCount` equivalent
 
 ### PostgreSQLDatabase
 
@@ -356,6 +356,7 @@ Reason:
 The Firebird plugin is already on par for:
 
 - `Database`-style query execution
+- affected-row reporting for non-query execution paths
 - prepared statements
 - transactions
 - schema inspection
@@ -385,11 +386,12 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Add `AffectedRowCount`
-2. Add SSL/TLS connection options if Firebird client/server configuration allows it cleanly
-3. Improve `RowSet` capability, especially navigation and update behavior
-4. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
-5. Consider a dedicated Firebird BLOB object only if streaming use cases appear often
+1. Add SSL/TLS connection options if Firebird client/server configuration allows it cleanly
+2. Improve `RowSet` capability only where it creates a real built-in-driver parity gain
+3. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+4. Consider a dedicated Firebird BLOB object only if streaming use cases appear often
+
+Phase 18 closes the earlier `AffectedRowCount` gap.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 

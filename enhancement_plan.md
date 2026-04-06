@@ -27,11 +27,12 @@ The Firebird plugin is already strong in:
 
 The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md) are:
 
-- `AffectedRowCount`
 - SSL/TLS connection controls
 - richer `RowSet` behavior
 - event/notification-style support
 - a dedicated BLOB object only if streaming use cases matter
+
+Phase 18 closes the earlier `AffectedRowCount` gap.
 
 ## Decision Update From User Direction
 
@@ -44,7 +45,6 @@ Your latest guidance changes the parity target in an important way:
 
 That means the most important parity targets are not just the earlier generic list. They are specifically the things Xojo's PostgreSQL driver exposes publicly and that real applications notice:
 
-- `AffectedRowCount`
 - SSL/TLS controls
 - notifications
 - large objects
@@ -60,39 +60,12 @@ It also means `RowSet` work should be treated carefully:
 
 This is the highest-value track because it most directly affects how Xojo developers experience the plugin.
 
-### 1. `AffectedRowCount`
-
-Priority: Highest  
-Difficulty: Low to medium  
-Risk: Low  
-Recommended order: First
-
-Why:
-
-- it is a built-in-driver expectation
-- it improves normal app code immediately
-- it has low conceptual risk
-- it does not require architectural churn
-
-Target outcome:
-
-- after `ExecuteSQL`, users can inspect how many rows were affected
-- behavior should be documented for:
-  - `INSERT`
-  - `UPDATE`
-  - `DELETE`
-  - statement shapes where Firebird does not report a meaningful count
-
-Recommendation:
-
-- do this next before anything else
-
-### 2. SSL/TLS connection controls
+### 1. SSL/TLS connection controls
 
 Priority: High  
 Difficulty: Medium to high  
 Risk: Medium  
-Recommended order: Second, but start with a feasibility spike
+Recommended order: First, but start with a feasibility spike
 
 Why:
 
@@ -137,7 +110,7 @@ Recommendation:
 
 - do not promise this feature until a short design spike proves it can be exposed cleanly
 
-### 3. `RowSet` capability improvements
+### 2. `RowSet` capability improvements
 
 Priority: High  
 Difficulty: Medium  
@@ -241,13 +214,12 @@ This is the right long-term differentiator because Xojo's built-in drivers do no
 
 If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is:
 
-1. `AffectedRowCount`
-2. SSL/TLS feasibility spike and API design
-3. SSL/TLS implementation only if the spike succeeds
-4. dedicated Firebird large-object / streaming BLOB design, modeled after PostgreSQL's large-object workflow
-5. event/notification support only if Firebird's event model maps cleanly enough to a PostgreSQL-like Xojo surface
-6. `RowSet` improvements after the PostgreSQL-parity items above are settled
-7. then return to deeper Firebird-specific service/admin expansion
+1. SSL/TLS feasibility spike and API design
+2. SSL/TLS implementation only if the spike succeeds
+3. dedicated Firebird large-object / streaming BLOB design, modeled after PostgreSQL's large-object workflow
+4. event/notification support only if Firebird's event model maps cleanly enough to a PostgreSQL-like Xojo surface
+5. `RowSet` improvements after the PostgreSQL-parity items above are settled
+6. then return to deeper Firebird-specific service/admin expansion
 
 ## What Not to Prioritize for Built-in Parity
 
@@ -270,7 +242,6 @@ The correct approach is:
 
 ### Wave 1: Immediate parity wins
 
-- `AffectedRowCount`
 - SSL/TLS feasibility investigation
 - PostgreSQL large-object parity investigation
 
@@ -312,7 +283,7 @@ These are the questions I need you to answer before implementation starts:
 
 1. Is your top priority developer ergonomics for normal app code, or enterprise/deployment credibility?
    - Answer received: both, but ergonomics first and deployment/security second.
-   - Result: `AffectedRowCount` is first, SSL/TLS is immediately behind it.
+   - Result: after Phase 18 closed `AffectedRowCount`, SSL/TLS is now first.
 
 2. Do you want strict built-in-driver mimicry, or are you comfortable with Firebird-native method names when the engine differs?
    - I recommend Firebird-native naming where behavior is not truly equivalent.
@@ -339,7 +310,7 @@ These are the questions I need you to answer before implementation starts:
 
 Using `PostgreSQLDatabase` as the gold standard implies these practical targets:
 
-- `AffectedRowCount` parity is mandatory
+- `AffectedRowCount` parity is complete in Phase 18
 - SSL/TLS should look more like PostgreSQL's `SSLMode`, `SSLKey`, `SSLCertificate`, and `SSLAuthority` than like a single on/off switch
 - large-object support should look more like `CreateLargeObject`, `OpenLargeObject`, `DeleteLargeObject`, plus a dedicated object for `Read`, `Write`, `Seek`, and `Tell`
 - event support should aim for a Xojo-style pattern similar to:
@@ -359,13 +330,12 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. implement `AffectedRowCount`
-2. run an SSL/TLS feasibility spike using PostgreSQL-style parity as the design target
-3. if feasible, implement SSL/TLS with a small but production-credible property set
-4. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
-5. defer event support until after that unless a real application need appears immediately
-6. treat `RowSet` enhancement as a secondary polish track unless it exposes a concrete PostgreSQL-parity gap
-7. then continue expanding Firebird's distinctive admin/service strengths
+1. run an SSL/TLS feasibility spike using PostgreSQL-style parity as the design target
+2. if feasible, implement SSL/TLS with a small but production-credible property set
+3. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
+4. defer event support until after that unless a real application need appears immediately
+5. treat `RowSet` enhancement as a secondary polish track unless it exposes a concrete PostgreSQL-parity gap
+6. then continue expanding Firebird's distinctive admin/service strengths
 
 Why this is best:
 
@@ -378,12 +348,12 @@ Why this is best:
 
 Default recommended next step:
 
-- `AffectedRowCount`
+- SSL/TLS feasibility and API design spike
 
 Default recommended second step:
 
-- SSL/TLS feasibility and API design spike
+- dedicated Firebird large-object / streaming BLOB design
 
 Default recommended third step:
 
-- dedicated Firebird large-object / streaming BLOB design
+- event/notification feasibility after the large-object direction is clear

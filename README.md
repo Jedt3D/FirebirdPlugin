@@ -9,6 +9,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - **FirebirdDatabase** class — inherits from `Database`, works with Xojo API 2.0 patterns
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
 - `Database.AddRow(...)` support, including generated-key return for common identity-primary-key workflows
+- `AffectedRowCount` property for the last non-query execution path
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
@@ -83,6 +84,27 @@ Behavior:
 - `db.AddRow("table", row, "ID")` uses the specified ID column in `RETURNING`
 
 For custom multi-column `RETURNING`, keep using `SelectSQL("INSERT ... RETURNING ...")`.
+
+## `AffectedRowCount`
+
+`FirebirdDatabase` exposes `AffectedRowCount As Int64` for the last non-query execution path:
+
+```vb
+db.ExecuteSQL("UPDATE customers SET active = ? WHERE id = ?", False, 1)
+System.DebugLog("Rows updated: " + db.AffectedRowCount.ToString)
+
+Var rs As RowSet = db.SelectSQL("SELECT id FROM customers WHERE id = ?", 1)
+rs.Close
+
+// SelectSQL does not erase the last non-query count
+System.DebugLog("Last affected rows: " + db.AffectedRowCount.ToString)
+```
+
+Notes:
+
+- `AffectedRowCount` is updated by `ExecuteSQL`, prepared `ExecuteSQL`, and native `AddRow`
+- `SelectSQL` does not clear the most recent non-query count
+- the property resets on connect/disconnect
 
 ## Firebird-Specific Metadata
 

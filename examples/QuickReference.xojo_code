@@ -179,6 +179,14 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   row.Column("Active") = True
   row.Column("Amount") = 12.34
   Var generatedId As Integer = db.AddRow("customers", row, "")
+  Var addRowAffected As Int64 = db.AffectedRowCount
+
+  db.ExecuteSQL("UPDATE customers SET active = ? WHERE id = ?", True, generatedId)
+  Var affectedRows As Int64 = db.AffectedRowCount
+
+  rs = db.SelectSQL("SELECT id FROM customers WHERE id = ?", generatedId)
+  rs.Close
+  Var preservedAffectedRows As Int64 = db.AffectedRowCount
 
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _

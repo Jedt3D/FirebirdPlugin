@@ -263,6 +263,7 @@ This table tracks implementation progress against the plan through the currently
 | 15 | Services API sweep-interval property slice | Complete | `144 passed, 0 failed` | `feature/phase-15` | `6c88875` | `phase_15_article.md` |
 | 16 | Services API limbo-recovery slice | Complete | `149 passed, 0 failed` | `feature/phase-16` | `4311cc4` | `phase_16_article.md` |
 | 17 | Services API shutdown / online control slice | Complete | `157 passed, 0 failed` | `feature/phase-17` | `924d213` | `phase_17_article.md` |
+| 18 | built-in-parity affected-row reporting slice | Complete | `162 passed, 0 failed` | `feature/phase-18` | `83b4baa` | `phase_18_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -553,7 +554,7 @@ Status: completed on April 6, 2026.
 | Type-aware string binding for modern types | Jaybird, .NET, Python | Complete | Converts textual Xojo input into Firebird wire structs using utility interfaces |
 | Modern-type desktop coverage | Jaybird, .NET | Complete | Round-trip tests added for all in-scope Firebird 4/5/6 types |
 
-### Phases 3-16: Expand toward broader Firebird SDK surface
+### Phases 3-18: Expand toward broader Firebird SDK surface
 
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
@@ -561,15 +562,17 @@ Status: completed on April 6, 2026.
 | transaction info helpers | Jaybird, .NET | Complete in Phase 03 | Done |
 | explicit transaction controls | Jaybird, .NET | Complete in Phase 04 with typed TPB-backed options | Done |
 | generated-key / `AddRow` convenience | Jaybird, Xojo database API | Complete in Phase 05 through native `AddRow` callbacks | Done |
+| affected-row reporting | Xojo built-in driver expectations | Complete in Phase 18 through `AffectedRowCount` on non-query execution paths | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 17 completes the first backup/restore/statistics/validation/sweep/limbo-list/limbo-recovery/sweep-interval/shutdown-online/user-display/add-delete-password-admin-profile/output slice | In progress by slices |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 17
+## Progress Summary Through Phase 18
 
-Planned through Phase 17 and now complete:
+Planned through Phase 18 and now complete:
 
+- affected-row reporting for non-query execution paths
 - database info helpers
 - Firebird 4/5/6 modern type support
 - transaction info helpers
@@ -593,8 +596,10 @@ Planned through Phase 17 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 17:
+Still outside completed scope after Phase 18:
 
+- SSL/TLS parity work
+- dedicated large-object / streaming BLOB surface
 - broader user-management workflows
 - broader maintenance/repair services
 - event API
@@ -611,9 +616,9 @@ Still outside completed scope after Phase 17:
 
 ### Do next
 
-- decide whether the next Services API slice should be another database-properties helper such as forced writes or reserve space
-- decide whether savepoints belong in the public Xojo surface or should stay out of scope
-- decide whether richer multi-column `RETURNING` helpers belong in the public Xojo surface
+- run an SSL/TLS feasibility spike using PostgreSQL-style parity as the target shape
+- evaluate a dedicated Firebird large-object / streaming BLOB API
+- decide whether Firebird event APIs are worth exposing in the public Xojo surface
 
 ### Defer until after the above
 
