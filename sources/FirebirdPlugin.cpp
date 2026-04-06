@@ -55,6 +55,9 @@ static int          fbCursorRowCount(dbCursor *);
 static void         fbCursorColumnValue(dbCursor *, int col, void **value, unsigned char *type, int *length);
 static void         fbCursorReleaseValue(dbCursor *);
 static RBBoolean    fbCursorNextRow(dbCursor *);
+static void         fbCursorPrevRow(dbCursor *);
+static void         fbCursorFirstRow(dbCursor *);
+static void         fbCursorLastRow(dbCursor *);
 static int          fbCursorColumnType(dbCursor *, int index);
 static RBBoolean    fbCursorIsBOF(dbCursor *);
 static RBBoolean    fbCursorIsEOF(dbCursor *);
@@ -164,9 +167,9 @@ static REALdbCursorDefinition sFirebirdCursor = {
     nullptr,                                 // cursorFieldKey
     nullptr,                                 // cursorUpdate
     nullptr,                                 // cursorEdit
-    nullptr,                                 // cursorPrevRow
-    nullptr,                                 // cursorFirstRow
-    nullptr,                                 // cursorLastRow
+    fbCursorPrevRow,
+    fbCursorFirstRow,
+    fbCursorLastRow,
     fbCursorColumnType,
     fbCursorIsBOF,
     fbCursorIsEOF,
@@ -468,9 +471,55 @@ static FirebirdCursorData *NewCursorData(FBDatabase *db, FBStatement *stmt) {
     cd->firstRowCalled = false;
     cd->eof = false;
     cd->bof = true;
+    cd->allRowsFetched = false;
+    cd->currentRow = -1;
     cd->lastValue = nullptr;
     cd->lastType = 0;
     return cd;
+}
+
+static bool CacheNextCursorRow(FirebirdCursorData *cd) {
+    if (!cd || !cd->stmt || cd->allRowsFetched) return false;
+
+    if (!cd->stmt->fetch()) {
+        cd->allRowsFetched = true;
+        return false;
+    }
+
+    std::vector<FBValue> row;
+    const int columnCount = cd->stmt->columnCount();
+    row.reserve((size_t)columnCount);
+    for (int i = 0; i < columnCount; i++) {
+        row.push_back(cd->stmt->columnValue(i));
+    }
+
+    cd->rows.push_back(std::move(row));
+    return true;
+}
+
+static bool EnsureCursorRow(FirebirdCursorData *cd, int rowIndex) {
+    if (!cd || rowIndex < 0) return false;
+
+    while ((int)cd->rows.size() <= rowIndex && !cd->allRowsFetched) {
+        if (!CacheNextCursorRow(cd)) break;
+    }
+
+    return rowIndex >= 0 && rowIndex < (int)cd->rows.size();
+}
+
+static void CacheAllCursorRows(FirebirdCursorData *cd) {
+    if (!cd) return;
+    while (!cd->allRowsFetched) {
+        if (!CacheNextCursorRow(cd)) break;
+    }
+}
+
+static void UpdateCursorFlags(FirebirdCursorData *cd) {
+    if (!cd) return;
+
+    const bool empty = cd->allRowsFetched && cd->rows.empty();
+    cd->bof = empty || cd->currentRow < 0;
+    cd->eof = empty || (cd->allRowsFetched && cd->currentRow >= (int)cd->rows.size());
 }
 
 static bool IsMemoryBlockObject(REALobject value) {
@@ -1122,7 +1171,10 @@ static REALstring fbCursorColumnName(dbCursor *cursor, int col) {
 }
 
 static int fbCursorRowCount(dbCursor *cursor) {
-    return -1; // Firebird forward-only cursors don't report row count
+    auto *cd = (FirebirdCursorData *)cursor;
+    if (!cd || !cd->stmt) return 0;
+    CacheAllCursorRows(cd);
+    return (int)cd->rows.size();
 }
 
 static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
@@ -1136,7 +1188,21 @@ static void fbCursorColumnValue(dbCursor *cursor, int col, void **value,
         return;
     }
 
-    FBValue val = cd->stmt->columnValue(col);
+    if (cd->currentRow < 0 || cd->currentRow >= (int)cd->rows.size()) {
+        *type = (unsigned char)dbTypeNull;
+        *value = nullptr;
+        *length = 0;
+        return;
+    }
+
+    if (col < 0 || col >= (int)cd->rows[(size_t)cd->currentRow].size()) {
+        *type = (unsigned char)dbTypeNull;
+        *value = nullptr;
+        *length = 0;
+        return;
+    }
+
+    const FBValue &val = cd->rows[(size_t)cd->currentRow][(size_t)col];
 
     if (val.isNull) {
         *type = (unsigned char)dbTypeNull;
@@ -1374,14 +1440,63 @@ static RBBoolean fbCursorNextRow(dbCursor *cursor) {
     auto *cd = (FirebirdCursorData *)cursor;
     if (!cd || !cd->stmt) return false;
 
-    cd->bof = false;
-    if (cd->stmt->fetch()) {
-        cd->eof = false;
+    const int targetRow = cd->currentRow + 1;
+    if (EnsureCursorRow(cd, targetRow)) {
+        cd->currentRow = targetRow;
         cd->firstRowCalled = true;
+        UpdateCursorFlags(cd);
         return true;
     }
-    cd->eof = true;
+
+    cd->currentRow = (int)cd->rows.size();
+    UpdateCursorFlags(cd);
     return false;
+}
+
+static void fbCursorPrevRow(dbCursor *cursor) {
+    auto *cd = (FirebirdCursorData *)cursor;
+    if (!cd || !cd->stmt) return;
+
+    if (cd->rows.empty() && !cd->allRowsFetched) {
+        CacheAllCursorRows(cd);
+    }
+
+    if (cd->currentRow > 0) {
+        cd->currentRow -= 1;
+    } else if (cd->currentRow >= (int)cd->rows.size() && !cd->rows.empty()) {
+        cd->currentRow = (int)cd->rows.size() - 1;
+    } else {
+        cd->currentRow = -1;
+    }
+
+    UpdateCursorFlags(cd);
+}
+
+static void fbCursorFirstRow(dbCursor *cursor) {
+    auto *cd = (FirebirdCursorData *)cursor;
+    if (!cd || !cd->stmt) return;
+
+    if (EnsureCursorRow(cd, 0)) {
+        cd->currentRow = 0;
+    } else {
+        cd->currentRow = -1;
+    }
+
+    UpdateCursorFlags(cd);
+}
+
+static void fbCursorLastRow(dbCursor *cursor) {
+    auto *cd = (FirebirdCursorData *)cursor;
+    if (!cd || !cd->stmt) return;
+
+    CacheAllCursorRows(cd);
+    if (cd->rows.empty()) {
+        cd->currentRow = -1;
+    } else {
+        cd->currentRow = (int)cd->rows.size() - 1;
+    }
+
+    UpdateCursorFlags(cd);
 }
 
 static int fbCursorColumnType(dbCursor *cursor, int index) {

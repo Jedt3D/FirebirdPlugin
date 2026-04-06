@@ -11,6 +11,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `Database.AddRow(...)` support, including generated-key return for common identity-primary-key workflows
 - `AffectedRowCount` property for the last non-query execution path
 - Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`
+- Buffered `RowSet` read navigation: `RowCount`, `MoveToPreviousRow`, `MoveToFirstRow`, `MoveToLastRow`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
@@ -108,6 +109,36 @@ Notes:
 - `AffectedRowCount` is updated by `ExecuteSQL`, prepared `ExecuteSQL`, and native `AddRow`
 - `SelectSQL` does not clear the most recent non-query count
 - the property resets on connect/disconnect
+
+## `RowSet` Navigation
+
+`FirebirdDatabase` now supports a buffered read-navigation slice on Xojo `RowSet` results:
+
+- `RowCount`
+- `MoveToPreviousRow`
+- `MoveToFirstRow`
+- `MoveToLastRow`
+
+```vb
+Var rs As RowSet = db.SelectSQL("SELECT Name FROM genres ORDER BY GenreId")
+
+System.DebugLog("Rows: " + rs.RowCount.ToString)
+
+rs.MoveToLastRow
+System.DebugLog("Last: " + rs.Column("Name").StringValue)
+
+rs.MoveToPreviousRow
+System.DebugLog("Previous: " + rs.Column("Name").StringValue)
+
+rs.MoveToFirstRow
+System.DebugLog("First: " + rs.Column("Name").StringValue)
+```
+
+Notes:
+
+- navigation is implemented through a buffered row cache inside the plugin cursor
+- this phase improves read-navigation parity only
+- editable row/update/delete cursor behavior is still out of scope
 
 ## Connection Security Options
 

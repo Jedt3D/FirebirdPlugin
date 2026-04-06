@@ -30,6 +30,9 @@ struct FirebirdCursorData {
     bool           firstRowCalled;
     bool           eof;
     bool           bof;
+    bool           allRowsFetched;
+    int            currentRow;
+    std::vector<std::vector<FBValue>> rows;
     void          *lastValue;   // last allocated value, freed on next call or release
     unsigned char  lastType;    // dbFieldType of last value
 };

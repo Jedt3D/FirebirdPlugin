@@ -192,6 +192,17 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   rs.Close
   Var preservedAffectedRows As Int64 = db.AffectedRowCount
 
+  // Buffered RowSet read-navigation helpers
+  rs = db.SelectSQL("SELECT Name FROM genres ORDER BY GenreId")
+  Var genreCount As Integer = rs.RowCount
+  rs.MoveToLastRow
+  Var lastGenre As String = rs.Column("Name").StringValue
+  rs.MoveToPreviousRow
+  Var previousGenre As String = rs.Column("Name").StringValue
+  rs.MoveToFirstRow
+  Var firstGenre As String = rs.Column("Name").StringValue
+  rs.Close
+
   // Firebird-native connection-security controls
   Var secureDb As New FirebirdDatabase
   secureDb.Host = db.Host

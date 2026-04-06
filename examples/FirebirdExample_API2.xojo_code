@@ -227,6 +227,33 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 5b: RowSet Navigation
+// ---------------------------------------------------------------------------
+
+Sub ShowRowSetNavigation(db As FirebirdDatabase)
+  Try
+    Var rs As RowSet = db.SelectSQL("SELECT Name FROM genres ORDER BY GenreId")
+
+    System.DebugLog("Row count: " + rs.RowCount.ToString)
+
+    rs.MoveToLastRow
+    System.DebugLog("Last genre: " + rs.Column("Name").StringValue)
+
+    rs.MoveToPreviousRow
+    System.DebugLog("Previous genre: " + rs.Column("Name").StringValue)
+
+    rs.MoveToFirstRow
+    System.DebugLog("First genre: " + rs.Column("Name").StringValue)
+
+    rs.Close
+
+  Catch err As DatabaseException
+    System.DebugLog("RowSet navigation error: " + err.Message)
+  End Try
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 6: Parameterized Query
 // ---------------------------------------------------------------------------
 

@@ -291,6 +291,7 @@ End
 		  TestSelectSQLUnicodeThai
 		  TestSelectSQLWithParams
 		  TestRowSetIteration
+		  TestRowSetNavigation
 		  TestRowSetColumnAccess
 		  TestExecuteSQL
 		  TestAffectedRowCount
@@ -1588,6 +1589,72 @@ End
 		    LogFail "PreparedStatement SELECT", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "PreparedStatement SELECT", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestRowSetNavigation()
+		  Log "-- Test: RowSet navigation --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    Var rs As RowSet = db.SelectSQL("SELECT Name FROM genres ORDER BY GenreId")
+		    If rs = Nil Or rs.AfterLastRow Then
+		      If rs <> Nil Then rs.Close
+		      LogFail "RowSet navigation", "No rows"
+		      db.Close
+		      Return
+		    End If
+		    
+		    If rs.RowCount = 3 Then
+		      LogPass "RowSet RowCount = 3"
+		    Else
+		      LogFail "RowSet RowCount", "Expected 3, got " + rs.RowCount.ToString
+		    End If
+		    
+		    rs.MoveToLastRow
+		    If Not rs.AfterLastRow And rs.Column("Name").StringValue = "Country" Then
+		      LogPass "RowSet MoveToLastRow"
+		    Else
+		      LogFail "RowSet MoveToLastRow", "Expected Country"
+		    End If
+		    
+		    rs.MoveToPreviousRow
+		    If Not rs.BeforeFirstRow And rs.Column("Name").StringValue = "Pop" Then
+		      LogPass "RowSet MoveToPreviousRow"
+		    Else
+		      LogFail "RowSet MoveToPreviousRow", "Expected Pop"
+		    End If
+		    
+		    rs.MoveToFirstRow
+		    If Not rs.BeforeFirstRow And rs.Column("Name").StringValue = "Rock" Then
+		      LogPass "RowSet MoveToFirstRow"
+		    Else
+		      LogFail "RowSet MoveToFirstRow", "Expected Rock"
+		    End If
+		    
+		    rs.MoveToPreviousRow
+		    If rs.BeforeFirstRow Then
+		      LogPass "RowSet BeforeFirstRow"
+		    Else
+		      LogFail "RowSet BeforeFirstRow", "Expected True after moving before the first row"
+		    End If
+		    
+		    rs.MoveToNextRow
+		    If Not rs.AfterLastRow And rs.Column("Name").StringValue = "Rock" Then
+		      LogPass "RowSet MoveToNextRow from BOF"
+		    Else
+		      LogFail "RowSet MoveToNextRow from BOF", "Expected Rock"
+		    End If
+		    
+		    rs.Close
+		  Catch ex As DatabaseException
+		    LogFail "RowSet navigation", ex.Message
 		  End Try
 		  
 		  db.Close
