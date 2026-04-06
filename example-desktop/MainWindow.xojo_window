@@ -128,6 +128,30 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Function CurrentSweepInterval() As Integer
+		  Var readDb As FirebirdDatabase = OpenTestDB
+		  If readDb = Nil Then Return -1
+		  
+		  Var rs As RowSet = readDb.SelectSQL("SELECT MON$SWEEP_INTERVAL FROM MON$DATABASE")
+		  If rs = Nil Then
+		    readDb.Close
+		    Return -1
+		  End If
+		  
+		  If rs.AfterLastRow Then
+		    rs.Close
+		    readDb.Close
+		    Return -1
+		  End If
+		  
+		  Var value As Integer = rs.Column("MON$SWEEP_INTERVAL").IntegerValue
+		  rs.Close
+		  readDb.Close
+		  Return value
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Function FindUserDisplayLine(report As String, userName As String) As String
 		  Var sanitized As String
 		  For Each ch As String In report.Characters
@@ -292,6 +316,7 @@ End
 		  TestValidateDatabase
 		  TestSweepDatabase
 		  TestListLimboTransactions
+		  TestSetSweepInterval
 		  TestDisplayUsers
 		  TestAddDeleteUser
 		  TestChangeUserPassword
@@ -1813,6 +1838,59 @@ End
 		    LogFail "Services database sweep", ex.Message
 		  End Try
 		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestSetSweepInterval()
+		  Log "-- Test: Services set sweep interval --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var originalInterval As Integer = CurrentSweepInterval
+		  If originalInterval < 0 Then
+		    LogFail "SetSweepInterval setup", "Unable to read current sweep interval"
+		    db.Close
+		    Return
+		  End If
+		  
+		  Var testInterval As Integer
+		  If originalInterval >= 20000 Then
+		    testInterval = originalInterval - 1
+		  Else
+		    testInterval = originalInterval + 1
+		  End If
+		  
+		  Try
+		    If db.SetSweepInterval(testInterval) Then
+		      LogPass "SetSweepInterval"
+		    Else
+		      LogFail "SetSweepInterval", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.LastServiceOutput.Trim <> "" Then
+		      LogPass "SetSweepInterval service output"
+		    Else
+		      LogPass "SetSweepInterval service output: property update produced no verbose output"
+		    End If
+		    
+		    Var updatedInterval As Integer = CurrentSweepInterval
+		    If updatedInterval = testInterval Then
+		      LogPass "SetSweepInterval readback"
+		    Else
+		      LogFail "SetSweepInterval readback", "Expected " + testInterval.ToString + ", got " + updatedInterval.ToString
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services set sweep interval", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services set sweep interval", ex.Message
+		  End Try
+		  
+		  Call db.SetSweepInterval(originalInterval)
 		  db.Close
 		End Sub
 	#tag EndMethod

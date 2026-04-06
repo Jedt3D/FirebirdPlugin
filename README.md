@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `ListLimboTransactions`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `ListLimboTransactions`, `SetSweepInterval`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -156,9 +156,9 @@ Lock-timeout semantics:
 - `0` = `NO WAIT`
 - `> 0` = wait for that many seconds
 
-## Services API: Backup, Restore, Statistics, Validation, and User Management
+## Services API: Backup, Restore, Statistics, Validation, Sweep Properties, and User Management
 
-Phases 06-11 add a narrow operational surface over the Firebird service manager:
+Phases 06-15 add a narrow operational surface over the Firebird service manager:
 
 - `BackupDatabase(backupFile As String) As Boolean`
 - `RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean`
@@ -166,6 +166,7 @@ Phases 06-11 add a narrow operational surface over the Firebird service manager:
 - `ValidateDatabase() As Boolean`
 - `SweepDatabase() As Boolean`
 - `ListLimboTransactions() As Boolean`
+- `SetSweepInterval(interval As Integer) As Boolean`
 - `DisplayUsers() As Boolean`
 - `AddUser(userName As String, password As String) As Boolean`
 - `ChangeUserPassword(userName As String, password As String) As Boolean`
@@ -208,6 +209,11 @@ If db.ListLimboTransactions Then
   System.DebugLog(db.LastServiceOutput)
 End If
 
+If db.SetSweepInterval(20000) Then
+  System.DebugLog("Sweep interval updated")
+  System.DebugLog(db.LastServiceOutput)
+End If
+
 If db.DisplayUsers Then
   System.DebugLog("User display complete")
   System.DebugLog(db.LastServiceOutput)
@@ -247,10 +253,11 @@ Notes:
 - `ValidateDatabase()` runs Firebird's online validation service for the currently connected database
 - `SweepDatabase()` runs Firebird's service-manager sweep action for the currently connected database
 - `ListLimboTransactions()` runs Firebird's service-manager limbo-transaction listing action for the currently connected database
+- `SetSweepInterval()` runs Firebird's database-properties service action for the currently connected database
 - `DisplayUsers()` runs Firebird's read-only user display service action
 - `AddUser()`, `ChangeUserPassword()`, `SetUserAdmin()`, `UpdateUserNames()`, and `DeleteUser()` run Firebird's security service actions for user mutation
 - `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, validation, user-display, or user-mutation operation
-- some service actions, including sweep and limbo listing on a clean database, may succeed without emitting verbose output
+- some service actions, including sweep, limbo listing on a clean database, and sweep-interval updates, may succeed without emitting verbose output
 - authoritative verification for admin/name mutation is best done through login behavior or `SEC$USERS`, not by scraping formatted `DisplayUsers()` text
 
 ## PreparedStatement Type Binds

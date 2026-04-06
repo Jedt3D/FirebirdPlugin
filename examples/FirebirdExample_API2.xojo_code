@@ -414,6 +414,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("Limbo transaction listing error: " + db.ErrorMessage)
     End If
 
+    If db.SetSweepInterval(20000) Then
+      System.DebugLog("Sweep interval update complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Sweep interval update error: " + db.ErrorMessage)
+    End If
+
     If db.DisplayUsers Then
       System.DebugLog("User display complete")
       System.DebugLog(db.LastServiceOutput)
