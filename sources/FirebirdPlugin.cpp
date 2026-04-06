@@ -3,6 +3,20 @@
 // FirebirdDatabase class, and PluginEntry().
 
 #include "FirebirdPlugin.h"
+
+#ifdef _WIN64
+// ARM64 builds use dynamic loading for cross-architecture support
+#include "FirebirdLoader.h"
+
+// Macros to redirect function calls to pointers for ARM64 builds
+#define isc_encode_sql_date ptr_isc_encode_sql_date
+#define isc_encode_sql_time ptr_isc_encode_sql_time
+#define isc_encode_timestamp ptr_isc_encode_timestamp
+#define isc_decode_sql_date ptr_isc_decode_sql_date
+#define isc_decode_sql_time ptr_isc_decode_sql_time
+#define isc_decode_timestamp ptr_isc_decode_timestamp
+#endif
+
 #include <cctype>
 #include <cstdlib>
 #include <cstring>

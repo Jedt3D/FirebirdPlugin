@@ -77,6 +77,12 @@ set(SOURCES
     sdk/GlueCode/PluginMain.cpp
 )
 
+# Add FirebirdLoader for ARM64 builds (cross-architecture support)
+if(WIN32 AND CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+    list(APPEND SOURCES sources/FirebirdLoader.cpp)
+    message(STATUS "ARM64 build: Using dynamic loading for Firebird client")
+endif()
+
 # macOS needs the Cocoa glue
 if(APPLE)
     list(APPEND SOURCES sdk/GlueCode/PluginMainCocoa.mm)
@@ -142,15 +148,22 @@ elseif(WIN32)
     set_target_properties(${PLUGIN_NAME} PROPERTIES
         LINK_FLAGS "/DEF:${DEF_FILE}"
     )
-    # Find fbclient import library
-    find_library(FBCLIENT_LIB
-        NAMES fbclient_ms fbclient
-        PATHS ${FB_LIB_DIR}
-    )
-    if(NOT FBCLIENT_LIB)
-        message(FATAL_ERROR "fbclient library not found in ${FB_LIB_DIR}")
+
+    # For ARM64 builds, use dynamic loading instead of direct linking
+    if(CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+        message(STATUS "ARM64 build: Skipping fbclient library linking (using dynamic loading)")
+        # No library linking for ARM64 - we use dynamic loading
+    else()
+        # Find fbclient import library for x64/x86 builds
+        find_library(FBCLIENT_LIB
+            NAMES fbclient_ms fbclient
+            PATHS ${FB_LIB_DIR}
+        )
+        if(NOT FBCLIENT_LIB)
+            message(FATAL_ERROR "fbclient library not found in ${FB_LIB_DIR}")
+        endif()
+        target_link_libraries(${PLUGIN_NAME} PRIVATE ${FBCLIENT_LIB})
     endif()
-    target_link_libraries(${PLUGIN_NAME} PRIVATE ${FBCLIENT_LIB})
 
 elseif(UNIX)
     target_compile_options(${PLUGIN_NAME} PRIVATE
