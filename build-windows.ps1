@@ -33,7 +33,9 @@ param(
 
     [string]$BuildType = "Release",
 
-    [string]$FirebirdVersion = "5.0.2"
+    [string]$FirebirdVersion = "6.0.0",  # Updated for Firebird 6.0 Beta
+
+    [switch]$Verbose
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,8 +49,16 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  FirebirdPlugin Windows Build" -ForegroundColor Cyan
 Write-Host "  Architecture: $Arch" -ForegroundColor Cyan
 Write-Host "  Config:       $BuildType" -ForegroundColor Cyan
+Write-Host "  Firebird:     $FirebirdVersion" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
+
+# ARM64 notice
+if ($Arch -eq "arm64") {
+    Write-Host "  NOTE: Building native ARM64 plugin with x64 Firebird client" -ForegroundColor Yellow
+    Write-Host "  (Firebird client will run under WOW64 emulation)" -ForegroundColor Yellow
+    Write-Host ""
+}
 
 # ---------------------------------------------------------------------------
 # Step 1: Find Visual Studio 2022
@@ -74,9 +84,11 @@ if ($Arch -eq "arm64") {
     $arm64Tools = & $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath 2>$null
     if (-not $arm64Tools) {
         Write-Host ""
-        Write-Host "  ARM64 build tools not found!" -ForegroundColor Red
+        Write-Host "  WARNING: ARM64 build tools not found!" -ForegroundColor Red
         Write-Host "  Open Visual Studio Installer and add:" -ForegroundColor Red
         Write-Host "    'MSVC ARM64 build tools' under Individual Components." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  You can still build for x64, but ARM64 requires these tools." -ForegroundColor Yellow
         exit 1
     }
     Write-Host "  ARM64 tools: OK" -ForegroundColor Green
@@ -103,6 +115,10 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
     Write-Host ""
     Write-Host "[2/5] Setting up Firebird $FirebirdVersion client..." -ForegroundColor Yellow
 
+    # For ARM64 builds, we use x64 Firebird client (works under emulation)
+    $fbArch = if ($Arch -eq "arm64") { "x64" } else { $Arch }
+    $fbDir = Join-Path $DepsDir "firebird_$fbArch"
+
     $fbDir = Join-Path $DepsDir "firebird_$($Arch)"
     if (Test-Path (Join-Path $fbDir "include\ibase.h")) {
         Write-Host "  Already downloaded at: $fbDir" -ForegroundColor Green
@@ -112,22 +128,26 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
 
         $dlPath = Join-Path $DepsDir "firebird.zip"
 
-        if ($Arch -eq "x64") {
-            # Use Firebird 6.0 snapshot for x64
-            $fbUrl = "https://github.com/FirebirdSQL/snapshots/releases/download/snapshot-master/Firebird-6.0.0.1880-0-6ff1f92-windows-x64.zip"
-        } elseif ($Arch -eq "arm64") {
-            # Use Firebird 6.0 snapshot for ARM64
-            $fbUrl = "https://github.com/FirebirdSQL/snapshots/releases/download/snapshot-master/Firebird-6.0.0.1880-0-6ff1f92-windows-arm64.zip"
+        # Firebird 6.0 download URLs - use x64 for both architectures (ARM64 uses x64 client)
+        if ($FirebirdVersion -eq "6.0.0") {
+            # Firebird 6.0 Beta URLs
+            $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v6.0.0-beta1/Firebird-6.0.0.1880-0-windows-x64.zip"
+        } else {
+            # Fallback to 5.x stable
+            $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${FirebirdVersion}/Firebird-${FirebirdVersion}-windows-x64.zip"
         }
 
         Write-Host "  Downloading: $fbUrl"
         try {
             Invoke-WebRequest -Uri $fbUrl -OutFile $dlPath -UseBasicParsing
         } catch {
-            # Fallback to stable 5.0.2 release
-            Write-Host "  Snapshot URL failed, falling back to Firebird $FirebirdVersion stable..." -ForegroundColor DarkYellow
-            $fbZip = "Firebird-${FirebirdVersion}-windows-x64.zip"
-            $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${FirebirdVersion}/$fbZip"
+            Write-Host "  Download failed, trying alternative source..." -ForegroundColor DarkYellow
+            # Alternative Firebird download locations
+            if ($FirebirdVersion -eq "6.0.0") {
+                $fbUrl = "https://firebirdsql.org/en/server-packages/Firebird-6.0.0.1880-0-windows-x64.zip"
+            } else {
+                $fbUrl = "https://firebirdsql.org/en/server-packages/Firebird-${FirebirdVersion}-windows-x64.zip"
+            }
             Invoke-WebRequest -Uri $fbUrl -OutFile $dlPath -UseBasicParsing
         }
 
@@ -136,17 +156,29 @@ if (-not $SkipFirebird -and -not $FirebirdRoot) {
         if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
         Expand-Archive -Path $dlPath -DestinationPath $extractDir -Force
 
-        # Firebird ZIP may have a nested directory
+        # Firebird ZIP may have a nested directory structure
         $nested = Get-ChildItem $extractDir -Directory | Select-Object -First 1
         if ($nested -and (Test-Path (Join-Path $nested.FullName "include"))) {
             $srcDir = $nested.FullName
         } else {
-            $srcDir = $extractDir
+            # Check for deeper nesting (common in Firebird packages)
+            $deepNested = Get-ChildItem $extractDir -Directory -Recurse | Where-Object { Test-Path (Join-Path $_.FullName "include") } | Select-Object -First 1
+            if ($deepNested) {
+                $srcDir = $deepNested.FullName
+            } else {
+                $srcDir = $extractDir
+            }
         }
 
-        # Copy to arch-specific directory
+        # Copy to architecture-specific directory (x64 for both x64 and ARM64 builds)
         if (Test-Path $fbDir) { Remove-Item $fbDir -Recurse -Force }
         Copy-Item -Path $srcDir -Destination $fbDir -Recurse
+
+        if ($Verbose) {
+            Write-Host "  Extracted from: $srcDir" -ForegroundColor DarkGray
+            Write-Host "  Contents of fbDir:" -ForegroundColor DarkGray
+            Get-ChildItem $fbDir | ForEach-Object { Write-Host "    $($_.Name)" -ForegroundColor DarkGray }
+        }
 
         # Clean up
         Remove-Item $dlPath -Force -ErrorAction SilentlyContinue

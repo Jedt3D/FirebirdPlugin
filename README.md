@@ -23,7 +23,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`
 - Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN, plus Firebird 4/5/6 modern types via `StringValue`
 - Supports **remote** (client/server) and **embedded** (direct file) connections
-- Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64), **Linux** (x64)
+- Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64, arm64), **Linux** (x64)
 
 ## Quick Example (Xojo API 2.0)
 
@@ -423,6 +423,9 @@ The easiest way to build on Windows. The script auto-detects VS2022, downloads F
 # Build for ARM64
 .\build-windows.ps1 -Arch arm64
 
+# Quick ARM64 build (assumes Firebird 6.0+ installed)
+.\build-quick.ps1
+
 # Clean rebuild
 .\build-windows.ps1 -Clean
 
@@ -433,7 +436,7 @@ The easiest way to build on Windows. The script auto-detects VS2022, downloads F
 .\build-windows.ps1 -SkipFirebird
 ```
 
-> **ARM64 note**: Firebird does not yet ship native ARM64 Windows builds. The script downloads the x64 client, which works under Windows ARM64's x64 emulation layer. The plugin DLL itself will be native ARM64.
+> **ARM64 note**: See [BUILD_WINDOWS_ARM64.md](BUILD_WINDOWS_ARM64.md) for detailed ARM64 build instructions. The plugin builds as native ARM64, using the x64 Firebird client under emulation.
 
 ### macOS (Makefile — quick local build)
 
@@ -459,8 +462,8 @@ cmake --build build --config Release
 cmake -B build -A x64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
-# Windows ARM64
-cmake -B build -A ARM64 -DFIREBIRD_ROOT="C:\Firebird" -DCMAKE_BUILD_TYPE=Release
+# Windows ARM64 (native plugin, x64 Firebird client)
+cmake -B build -A ARM64 -DFIREBIRD_ROOT="C:\Program Files\Firebird\Firebird_6_0" -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 
 # Linux
@@ -492,7 +495,7 @@ The built binary lands in `build/plugin/FirebirdPlugin/Build Resources/<platform
 The included workflow (`.github/workflows/build.yml`) builds for all platforms in parallel:
 
 - **macOS**: arm64 + x86_64 (separate artifacts)
-- **Windows**: x64 (static CRT, no vcruntime dependency)
+- **Windows**: x64 + arm64 (separate artifacts, static CRT, no vcruntime dependency)
 - **Linux**: x64
 
 The `package` job merges all platform binaries into a single `.xojo_plugin` ZIP. When you push a version tag (`v*`), it automatically creates a GitHub Release with the plugin attached.
@@ -514,6 +517,7 @@ FirebirdPlugin/
     Mac arm64/FirebirdPlugin.dylib
     Mac x86-64/FirebirdPlugin.dylib
     Windows x86-64/FirebirdPlugin.dll
+    Windows arm64/FirebirdPlugin.dll
     Linux x86-64/FirebirdPlugin.so
 ```
 
@@ -529,6 +533,10 @@ If you're coming from MySQL or PostgreSQL, here are some Firebird differences:
 | LIMIT | `FIRST n SKIP m` or `FETCH FIRST n ROWS ONLY` | `LIMIT n OFFSET m` |
 | Case sensitivity | Unquoted identifiers are UPPERCASE | Varies |
 | Default port | 3050 | 3306 / 5432 |
+
+## Windows ARM64 Support
+
+Windows ARM64 builds are supported as of [v0.2.0](https://github.com/yourusername/FirebirdPlugin/releases/tag/v0.2.0). The plugin compiles as native ARM64 code while using the x64 Firebird client library under Windows' emulation layer. See [BUILD_WINDOWS_ARM64.md](BUILD_WINDOWS_ARM64.md) for detailed build instructions and performance notes.
 
 ## Acknowledgments
 

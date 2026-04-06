@@ -55,17 +55,20 @@ jobs:
           path: build/plugin/
 
   # -------------------------------------------------------------------------
-  # Windows — x64
+  # Windows — x64 + ARM64
   # -------------------------------------------------------------------------
   build-windows:
     runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Firebird client
         shell: pwsh
         run: |
-          # Download Firebird Windows zip (client only)
+          # Download Firebird Windows zip - use x64 for both architectures
           $fbZip = "Firebird-${{ env.FB_VERSION }}-windows-x64.zip"
           $fbUrl = "https://github.com/FirebirdSQL/firebird/releases/download/v${{ env.FB_VERSION }}/$fbZip"
           Invoke-WebRequest -Uri $fbUrl -OutFile firebird.zip -ErrorAction SilentlyContinue
@@ -91,7 +94,9 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake -B build -A x64 `
+          $cmakeArch = "${{ matrix.arch }}"
+          if ($cmakeArch -eq "arm64") { $cmakeArch = "ARM64" }
+          cmake -B build -A $cmakeArch `
             -DFIREBIRD_ROOT="$env:FIREBIRD_ROOT" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
@@ -99,7 +104,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-x64
+          name: windows-${{ matrix.arch }}
           path: build/plugin/
 
   # -------------------------------------------------------------------------
