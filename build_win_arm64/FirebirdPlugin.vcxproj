@@ -88,7 +88,7 @@
   <PropertyGroup />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -113,10 +113,10 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;WINDOWS=1;TARGET_WIN32=1;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;CMAKE_INTDIR=\"Debug\";FirebirdPlugin_EXPORTS</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -173,7 +173,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -199,10 +199,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WINDOWS=1;TARGET_WIN32=1;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;CMAKE_INTDIR=\"Release\";FirebirdPlugin_EXPORTS</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -259,7 +259,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -285,10 +285,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WINDOWS=1;TARGET_WIN32=1;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;CMAKE_INTDIR=\"MinSizeRel\";FirebirdPlugin_EXPORTS</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -345,7 +345,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|ARM64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -370,10 +370,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;WINDOWS=1;TARGET_WIN32=1;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;CMAKE_INTDIR=\"RelWithDebInfo\";FirebirdPlugin_EXPORTS</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Program Files\Firebird\Firebird_6_0\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\sdk\Includes;C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols\include;C:\Users\worajedt\Documents\GitHub\FirebirdPlugin\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>

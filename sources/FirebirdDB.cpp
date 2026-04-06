@@ -25,19 +25,19 @@ struct FirebirdUtilityInterfaces {
         master = fb_get_master_interface();
         if (!master) return;
 
-        util = IMaster_getUtilInterface(master);
+        util = master->getUtilInterface();
         if (!util) return;
 
-        IStatus *status = IMaster_getStatus(master);
+        IStatus* status = master->getStatus();
         if (!status) return;
 
-        IStatus_init(status);
-        dec16 = IUtil_getDecFloat16(util, status);
-        IStatus_init(status);
-        dec34 = IUtil_getDecFloat34(util, status);
-        IStatus_init(status);
-        int128 = IUtil_getInt128(util, status);
-        IStatus_dispose(status);
+        status->init();
+        dec16 = util->getDecFloat16(status);
+        status->init();
+        dec34 = util->getDecFloat34(status);
+        status->init();
+        int128 = util->getInt128(status);
+        status->dispose();
     }
 };
 
@@ -51,19 +51,19 @@ public:
     FirebirdStatusScope() {
         auto &utilities = GetFirebirdUtilities();
         if (utilities.master) {
-            mStatus = IMaster_getStatus(utilities.master);
-            if (mStatus) IStatus_init(mStatus);
+            mStatus = utilities.master->getStatus();
+            if (mStatus) mStatus->init();
         }
     }
 
     ~FirebirdStatusScope() {
-        if (mStatus) IStatus_dispose(mStatus);
+        if (mStatus) mStatus->dispose();
     }
 
-    IStatus *get() const { return mStatus; }
+    IStatus* get() const { return mStatus; }
 
     bool ok() const {
-        return mStatus && !(IStatus_getState(mStatus) & IStatus_STATE_ERRORS);
+        return mStatus && !(mStatus->getState() & IStatus::STATE_ERRORS);
     }
 
 private:
@@ -136,8 +136,8 @@ bool FormatInt128Value(const FB_I128 &value, short scale, std::string &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    std::array<char, IInt128_STRING_SIZE + 1> buffer = {};
-    IInt128_toString(utilities.int128, status.get(), &value, scale, (unsigned)buffer.size(), buffer.data());
+    std::array<char, IInt128::STRING_SIZE + 1> buffer = {};
+    utilities.int128->toString(status.get(), &value, scale, (unsigned)buffer.size(), buffer.data());
     if (!status.ok()) return false;
 
     out.assign(buffer.data());
@@ -151,7 +151,7 @@ bool ParseInt128Value(const std::string &text, short scale, FB_I128 &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    IInt128_fromString(utilities.int128, status.get(), scale, text.c_str(), &out);
+    utilities.int128->fromString(status.get(), scale, text.c_str(), &out);
     return status.ok();
 }
 
@@ -162,8 +162,8 @@ bool FormatDecFloat16Value(const FB_DEC16 &value, std::string &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    std::array<char, IDecFloat16_STRING_SIZE + 1> buffer = {};
-    IDecFloat16_toString(utilities.dec16, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    std::array<char, IDecFloat16::STRING_SIZE + 1> buffer = {};
+    utilities.dec16->toString(status.get(), &value, (unsigned)buffer.size(), buffer.data());
     if (!status.ok()) return false;
 
     out.assign(buffer.data());
@@ -177,7 +177,7 @@ bool ParseDecFloat16Value(const std::string &text, FB_DEC16 &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    IDecFloat16_fromString(utilities.dec16, status.get(), text.c_str(), &out);
+    utilities.dec16->fromString(status.get(), text.c_str(), &out);
     return status.ok();
 }
 
@@ -188,8 +188,8 @@ bool FormatDecFloat34Value(const FB_DEC34 &value, std::string &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    std::array<char, IDecFloat34_STRING_SIZE + 1> buffer = {};
-    IDecFloat34_toString(utilities.dec34, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    std::array<char, IDecFloat34::STRING_SIZE + 1> buffer = {};
+    utilities.dec34->toString(status.get(), &value, (unsigned)buffer.size(), buffer.data());
     if (!status.ok()) return false;
 
     out.assign(buffer.data());
@@ -203,7 +203,7 @@ bool ParseDecFloat34Value(const std::string &text, FB_DEC34 &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    IDecFloat34_fromString(utilities.dec34, status.get(), text.c_str(), &out);
+    utilities.dec34->fromString(status.get(), text.c_str(), &out);
     return status.ok();
 }
 
@@ -262,7 +262,7 @@ bool FormatTimeTzValue(const ISC_TIME_TZ &value, std::string &out) {
     unsigned fractions = 0;
     std::array<char, 128> timeZone = {};
 
-    IUtil_decodeTimeTz(utilities.util, status.get(), &value,
+    utilities.util->decodeTimeTz(status.get(), &value,
                        &hour, &minute, &second, &fractions,
                        (unsigned)timeZone.size(), timeZone.data());
     if (!status.ok()) return false;
@@ -284,7 +284,7 @@ bool FormatTimeTzExValue(const ISC_TIME_TZ_EX &value, std::string &out) {
     unsigned fractions = 0;
     std::array<char, 128> timeZone = {};
 
-    IUtil_decodeTimeTzEx(utilities.util, status.get(), &value,
+    utilities.util->decodeTimeTzEx(status.get(), &value,
                          &hour, &minute, &second, &fractions,
                          (unsigned)timeZone.size(), timeZone.data());
     if (!status.ok()) return false;
@@ -312,7 +312,7 @@ bool ParseTimeTzValue(const std::string &text, ISC_TIME_TZ &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    IUtil_encodeTimeTz(utilities.util, status.get(), &out, hour, minute, second, fractions, zonePart.c_str());
+    utilities.util->encodeTimeTz(status.get(), &out, hour, minute, second, fractions, zonePart.c_str());
     return status.ok();
 }
 
@@ -332,7 +332,7 @@ bool FormatTimestampTzValue(const ISC_TIMESTAMP_TZ &value, std::string &out) {
     unsigned fractions = 0;
     std::array<char, 128> timeZone = {};
 
-    IUtil_decodeTimeStampTz(utilities.util, status.get(), &value,
+    utilities.util->decodeTimeStampTz(status.get(), &value,
                             &year, &month, &day, &hour, &minute, &second, &fractions,
                             (unsigned)timeZone.size(), timeZone.data());
     if (!status.ok()) return false;
@@ -357,7 +357,7 @@ bool FormatTimestampTzExValue(const ISC_TIMESTAMP_TZ_EX &value, std::string &out
     unsigned fractions = 0;
     std::array<char, 128> timeZone = {};
 
-    IUtil_decodeTimeStampTzEx(utilities.util, status.get(), &value,
+    utilities.util->decodeTimeStampTzEx(status.get(), &value,
                               &year, &month, &day, &hour, &minute, &second, &fractions,
                               (unsigned)timeZone.size(), timeZone.data());
     if (!status.ok()) return false;
@@ -397,7 +397,7 @@ bool ParseTimestampTzValue(const std::string &text, ISC_TIMESTAMP_TZ &out) {
     FirebirdStatusScope status;
     if (!status.get()) return false;
 
-    IUtil_encodeTimeStampTz(utilities.util, status.get(), &out,
+    utilities.util->encodeTimeStampTz(status.get(), &out,
                             year, month, day, hour, minute, second, fractions,
                             zonePart.c_str());
     return status.ok();
@@ -573,7 +573,7 @@ std::string FormatInterfaceStatus(IStatus *status) {
     if (!status || !utilities.util) return "Firebird interface error";
 
     std::array<char, 1024> buffer = {};
-    IUtil_formatStatus(utilities.util, buffer.data(), (unsigned)buffer.size(), status);
+    utilities.util->formatStatus(buffer.data(), (unsigned)buffer.size(), status);
     return std::string(buffer.data());
 }
 
@@ -1155,29 +1155,29 @@ bool FBDatabase::backupDatabase(const std::string &backupFile) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200109, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_backup);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_bkp_file, backupFile.c_str());
+    builder->insertTag(status.get(), isc_action_svc_backup);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertString(status.get(), isc_spb_bkp_file, backupFile.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertTag(builder, status.get(), isc_spb_verbose);
+    builder->insertTag(status.get(), isc_spb_verbose);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200110, FormatInterfaceStatus(status.get()));
@@ -1208,31 +1208,31 @@ bool FBDatabase::restoreDatabase(const std::string &backupFile, const std::strin
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200112, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_restore);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_bkp_file, backupFile.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, targetDatabase.c_str());
+    builder->insertTag(status.get(), isc_action_svc_restore);
+    builder->insertString(status.get(), isc_spb_bkp_file, backupFile.c_str());
+    builder->insertString(status.get(), isc_spb_dbname, targetDatabase.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options,
+    builder->insertInt(status.get(), isc_spb_options,
                           replaceExisting ? isc_spb_res_replace : isc_spb_res_create);
-    IXpbBuilder_insertTag(builder, status.get(), isc_spb_verbose);
+    builder->insertTag(status.get(), isc_spb_verbose);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200113, FormatInterfaceStatus(status.get()));
@@ -1259,29 +1259,29 @@ bool FBDatabase::databaseStatistics() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200116, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_db_stats);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_db_stats);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options,
+    builder->insertInt(status.get(), isc_spb_options,
                           isc_spb_sts_data_pages | isc_spb_sts_idx_pages);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200117, FormatInterfaceStatus(status.get()));
@@ -1308,27 +1308,27 @@ bool FBDatabase::validateDatabase() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200120, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_validate);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_validate);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200121, FormatInterfaceStatus(status.get()));
@@ -1355,28 +1355,28 @@ bool FBDatabase::sweepDatabase() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200150, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_repair);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options, isc_spb_rpr_sweep_db);
+    builder->insertInt(status.get(), isc_spb_options, isc_spb_rpr_sweep_db);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200151, FormatInterfaceStatus(status.get()));
@@ -1403,28 +1403,28 @@ bool FBDatabase::listLimboTransactions() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200154, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_repair);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_options, isc_spb_rpr_list_limbo_trans);
+    builder->insertInt(status.get(), isc_spb_options, isc_spb_rpr_list_limbo_trans);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200155, FormatInterfaceStatus(status.get()));
@@ -1455,28 +1455,28 @@ bool FBDatabase::commitLimboTransaction(int64_t transactionId) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200164, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_repair);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertBigInt(builder, status.get(), isc_spb_rpr_commit_trans_64, transactionId);
+    builder->insertBigInt(status.get(), isc_spb_rpr_commit_trans_64, transactionId);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200165, FormatInterfaceStatus(status.get()));
@@ -1507,28 +1507,28 @@ bool FBDatabase::rollbackLimboTransaction(int64_t transactionId) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200169, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_repair);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertBigInt(builder, status.get(), isc_spb_rpr_rollback_trans_64, transactionId);
+    builder->insertBigInt(status.get(), isc_spb_rpr_rollback_trans_64, transactionId);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200170, FormatInterfaceStatus(status.get()));
@@ -1559,28 +1559,28 @@ bool FBDatabase::setSweepInterval(long interval) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200159, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_properties);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_properties);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_prp_sweep_interval, interval);
+    builder->insertInt(status.get(), isc_spb_prp_sweep_interval, interval);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200160, FormatInterfaceStatus(status.get()));
@@ -1611,7 +1611,7 @@ bool FBDatabase::shutdownDenyNewAttachments(long timeoutSeconds) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200174, FormatInterfaceStatus(status.get()));
         return false;
@@ -1619,23 +1619,23 @@ bool FBDatabase::shutdownDenyNewAttachments(long timeoutSeconds) {
 
     const unsigned char shutdownMode = isc_spb_prp_sm_multi;
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_properties);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_properties);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertBytes(builder, status.get(), isc_spb_prp_shutdown_mode, &shutdownMode, 1);
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_prp_attachments_shutdown, timeoutSeconds);
+    builder->insertBytes(status.get(), isc_spb_prp_shutdown_mode, &shutdownMode, 1);
+    builder->insertInt(status.get(), isc_spb_prp_attachments_shutdown, timeoutSeconds);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200175, FormatInterfaceStatus(status.get()));
@@ -1662,7 +1662,7 @@ bool FBDatabase::bringDatabaseOnline() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200178, FormatInterfaceStatus(status.get()));
         return false;
@@ -1670,22 +1670,22 @@ bool FBDatabase::bringDatabaseOnline() {
 
     const unsigned char onlineMode = isc_spb_prp_sm_normal;
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_properties);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    builder->insertTag(status.get(), isc_action_svc_properties);
+    builder->insertString(status.get(), isc_spb_dbname, mDatabasePath.c_str());
     if (!mRole.empty()) {
-        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+        builder->insertString(status.get(), isc_spb_sql_role_name, mRole.c_str());
     }
-    IXpbBuilder_insertBytes(builder, status.get(), isc_spb_prp_online_mode, &onlineMode, 1);
+    builder->insertBytes(status.get(), isc_spb_prp_online_mode, &onlineMode, 1);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200179, FormatInterfaceStatus(status.get()));
@@ -1707,23 +1707,23 @@ bool FBDatabase::displayUsers() {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200123, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_display_user);
+    builder->insertTag(status.get(), isc_action_svc_display_user);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200124, FormatInterfaceStatus(status.get()));
@@ -1758,25 +1758,25 @@ bool FBDatabase::addUser(const std::string &userName, const std::string &passwor
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200129, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_add_user);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_password, password.c_str());
+    builder->insertTag(status.get(), isc_action_svc_add_user);
+    builder->insertString(status.get(), isc_spb_sec_username, userName.c_str());
+    builder->insertString(status.get(), isc_spb_sec_password, password.c_str());
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200130, FormatInterfaceStatus(status.get()));
@@ -1807,25 +1807,25 @@ bool FBDatabase::changeUserPassword(const std::string &userName, const std::stri
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200138, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_password, password.c_str());
+    builder->insertTag(status.get(), isc_action_svc_modify_user);
+    builder->insertString(status.get(), isc_spb_sec_username, userName.c_str());
+    builder->insertString(status.get(), isc_spb_sec_password, password.c_str());
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200139, FormatInterfaceStatus(status.get()));
@@ -1852,25 +1852,25 @@ bool FBDatabase::setUserAdmin(const std::string &userName, bool isAdmin) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200142, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
-    IXpbBuilder_insertInt(builder, status.get(), isc_spb_sec_admin, isAdmin ? 1 : 0);
+    builder->insertTag(status.get(), isc_action_svc_modify_user);
+    builder->insertString(status.get(), isc_spb_sec_username, userName.c_str());
+    builder->insertInt(status.get(), isc_spb_sec_admin, isAdmin ? 1 : 0);
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200143, FormatInterfaceStatus(status.get()));
@@ -1897,27 +1897,27 @@ bool FBDatabase::updateUserNames(const std::string &userName, const std::string 
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200146, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_firstname, firstName.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_middlename, middleName.c_str());
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_lastname, lastName.c_str());
+    builder->insertTag(status.get(), isc_action_svc_modify_user);
+    builder->insertString(status.get(), isc_spb_sec_username, userName.c_str());
+    builder->insertString(status.get(), isc_spb_sec_firstname, firstName.c_str());
+    builder->insertString(status.get(), isc_spb_sec_middlename, middleName.c_str());
+    builder->insertString(status.get(), isc_spb_sec_lastname, lastName.c_str());
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200147, FormatInterfaceStatus(status.get()));
@@ -1944,24 +1944,24 @@ bool FBDatabase::deleteUser(const std::string &userName) {
         return false;
     }
 
-    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    IXpbBuilder* builder = utilities.util->getXpbBuilder(status.get(), IXpbBuilder::SPB_START, nullptr, 0);
     if (!builder || !status.ok()) {
         setError(-200133, FormatInterfaceStatus(status.get()));
         return false;
     }
 
-    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_delete_user);
-    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
+    builder->insertTag(status.get(), isc_action_svc_delete_user);
+    builder->insertString(status.get(), isc_spb_sec_username, userName.c_str());
 
     std::vector<char> request;
     if (status.ok()) {
-        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
-        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        unsigned length = builder->getBufferLength(status.get());
+        const unsigned char* buffer = builder->getBuffer(status.get());
         if (status.ok() && buffer && length > 0) {
             request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
         }
     }
-    IXpbBuilder_dispose(builder);
+    builder->dispose();
 
     if (!status.ok() || request.empty()) {
         setError(-200134, FormatInterfaceStatus(status.get()));
