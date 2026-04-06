@@ -65,6 +65,8 @@ static RBBoolean    fbClassRestoreDatabase(REALobject instance, REALstring backu
 static RBBoolean    fbClassDatabaseStatistics(REALobject instance);
 static RBBoolean    fbClassValidateDatabase(REALobject instance);
 static RBBoolean    fbClassDisplayUsers(REALobject instance);
+static RBBoolean    fbClassAddUser(REALobject instance, REALstring userName, REALstring password);
+static RBBoolean    fbClassDeleteUser(REALobject instance, REALstring userName);
 static REALstring   fbClassLastServiceOutput(REALobject instance);
 
 // Prepared statement class methods
@@ -185,6 +187,8 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassDatabaseStatistics, REALnoImplementation, "DatabaseStatistics() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassValidateDatabase, REALnoImplementation, "ValidateDatabase() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDisplayUsers, REALnoImplementation, "DisplayUsers() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassAddUser, REALnoImplementation, "AddUser(userName As String, password As String) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassDeleteUser, REALnoImplementation, "DeleteUser(userName As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassLastServiceOutput, REALnoImplementation, "LastServiceOutput() As String", REALconsoleSafe },
 };
 
@@ -1542,6 +1546,18 @@ static RBBoolean fbClassDisplayUsers(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->displayUsers();
+}
+
+static RBBoolean fbClassAddUser(REALobject instance, REALstring userName, REALstring password) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->addUser(RealToStd(userName), RealToStd(password));
+}
+
+static RBBoolean fbClassDeleteUser(REALobject instance, REALstring userName) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->deleteUser(RealToStd(userName));
 }
 
 static REALstring fbClassLastServiceOutput(REALobject instance) {

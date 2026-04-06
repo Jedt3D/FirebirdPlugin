@@ -140,6 +140,10 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var validateLog As String = db.LastServiceOutput
   Var usersOk As Boolean = db.DisplayUsers
   Var usersLog As String = db.LastServiceOutput
+  Var addUserOk As Boolean = db.AddUser("QUICKREF_USER", "quickref_secret")
+  Var addUserLog As String = db.LastServiceOutput
+  Var deleteUserOk As Boolean = db.DeleteUser("QUICKREF_USER")
+  Var deleteUserLog As String = db.LastServiceOutput
 
   // Native Xojo DatabaseRow insert convenience
   Var row As New DatabaseRow

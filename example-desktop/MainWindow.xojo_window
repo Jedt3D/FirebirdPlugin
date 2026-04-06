@@ -187,6 +187,7 @@ End
 		  TestDatabaseStatistics
 		  TestValidateDatabase
 		  TestDisplayUsers
+		  TestAddDeleteUser
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1695,6 +1696,66 @@ End
 		    LogFail "Services display users", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services display users", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestAddDeleteUser()
+		  Log "-- Test: Services add / delete user --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var testUser As String = "XOJO_PHASE10_USER"
+		  Var testPassword As String = "phase10_secret"
+		  
+		  Try
+		    Call db.DeleteUser(testUser)
+		    
+		    If db.AddUser(testUser, testPassword) Then
+		      LogPass "AddUser"
+		    Else
+		      LogFail "AddUser", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.DisplayUsers Then
+		      Var report As String = db.LastServiceOutput
+		      If report.IndexOf(testUser) >= 0 Then
+		        LogPass "AddUser readback"
+		      Else
+		        LogFail "AddUser readback", "Expected added user in display output"
+		      End If
+		    Else
+		      LogFail "AddUser readback", db.ErrorMessage
+		    End If
+		    
+		    If db.DeleteUser(testUser) Then
+		      LogPass "DeleteUser"
+		    Else
+		      LogFail "DeleteUser", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.DisplayUsers Then
+		      Var reportAfterDelete As String = db.LastServiceOutput
+		      If reportAfterDelete.IndexOf(testUser) < 0 Then
+		        LogPass "DeleteUser readback"
+		      Else
+		        LogFail "DeleteUser readback", "Expected deleted user to be absent"
+		      End If
+		    Else
+		      LogFail "DeleteUser readback", db.ErrorMessage
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services add / delete user", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services add / delete user", ex.Message
 		  End Try
 		  
 		  db.Close

@@ -363,7 +363,7 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
-// Example 11c: Services Backup / Restore / Statistics / Validation / User Display
+// Example 11c: Services Backup / Restore / Statistics / Validation / User Management
 // ---------------------------------------------------------------------------
 
 Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
@@ -405,6 +405,20 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog(db.LastServiceOutput)
     Else
       System.DebugLog("User display error: " + db.ErrorMessage)
+    End If
+
+    If db.AddUser("EXAMPLE_PHASE10_USER", "example_secret") Then
+      System.DebugLog("User add complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User add error: " + db.ErrorMessage)
+    End If
+
+    If db.DeleteUser("EXAMPLE_PHASE10_USER") Then
+      System.DebugLog("User delete complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User delete error: " + db.ErrorMessage)
     End If
   Catch err As RuntimeException
     System.DebugLog("Services error: " + err.Message)
