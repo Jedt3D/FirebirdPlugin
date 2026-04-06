@@ -232,7 +232,7 @@ The checklist below compares the current Xojo plugin to that surface.
 | Request API / BLR style APIs | low-level request functions | `[ ]` | Not implemented and probably out of scope for Xojo v1 |
 | Event API | `isc_event_*` | `[ ]` | Not implemented |
 | Security/user management core API | security-related APIs | `[ ]` | Not implemented |
-| Services API | backup, restore, statistics, validation, user management, trace, etc. | `[-]` | Phase 10 extends the first slice to backup, restore, database statistics, online validation, user display, basic user mutation, and verbose service output |
+| Services API | backup, restore, statistics, validation, user management, trace, etc. | `[-]` | Phase 11 extends the first slice to backup, restore, database statistics, online validation, user display, basic user mutation with password change, and verbose service output |
 | Type conversions for text and date/time | helper functions and driver mapping | `[x]` | Current plugin maps common legacy types to Xojo values |
 | `INT128` support | newer data type support | `[x]` | Exposed through `StringValue` and type-aware string binding |
 | `DECFLOAT` support | newer data type support | `[x]` | Exposed through `StringValue` and type-aware string binding |
@@ -256,6 +256,7 @@ This table tracks implementation progress against the plan through the currently
 | 08 | Services API online validation slice | Complete | `113 passed, 0 failed` | `feature/phase-08` | `303fa7c` | `phase_08_article.md` |
 | 09 | Services API read-only user display slice | Complete | `116 passed, 0 failed` | `feature/phase-09` | `8cec51e` | `phase_09_article.md` |
 | 10 | Services API basic user-mutation slice | Complete | `120 passed, 0 failed` | `feature/phase-10` | `f46905c` | `phase_10_article.md` |
+| 11 | Services API password-change slice | Complete | `125 passed, 0 failed` | `feature/phase-11` | `95d8583` | `phase_11_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -275,7 +276,7 @@ This table tracks implementation progress against the plan through the currently
 - explicit TPB-backed transaction options for isolation, read-only/read-write, and lock timeout
 - schema helpers: tables, columns, indexes
 - database info helpers backed by `isc_database_info`
-- Services API first slice for backup, restore, database statistics, online validation, user display, basic user mutation, and verbose service output
+- Services API first slice for backup, restore, database statistics, online validation, user display, basic user mutation with password change, and verbose service output
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
 - Firebird 4/5/6 modern type mapping: `INT128`, `DECFLOAT`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE` via string semantics
 - text and binary BLOB reads
@@ -288,7 +289,7 @@ This table tracks implementation progress against the plan through the currently
 
 ### Missing compared to the broader Firebird SDK
 
-- broader Services API beyond backup/restore/statistics/validation/user-display/basic-user-mutation
+- broader Services API beyond backup/restore/statistics/validation/user-display/basic-user-mutation/password-change
 - Events API
 - Array API
 - modern interface-based API
@@ -313,7 +314,7 @@ This is the intended feature set for the Xojo plugin within the current scope.
 - explicit transaction options backed by Firebird TPB
 - schema helpers for tables, columns, and indexes
 - database info helpers backed by `isc_database_info`
-- Services API first slice for backup, restore, database statistics, online validation, user display, basic user mutation, and verbose service output
+- Services API first slice for backup, restore, database statistics, online validation, user display, basic user mutation with password change, and verbose service output
 
 ### Type support
 
@@ -340,7 +341,7 @@ This is the intended feature set for the Xojo plugin within the current scope.
 
 ### Deferred features
 
-- broader Services API beyond backup/restore/statistics/validation/user-display/basic-user-mutation
+- broader Services API beyond backup/restore/statistics/validation/user-display/basic-user-mutation/password-change
 - Events API
 - Array API
 - BLR/request-style APIs
@@ -421,6 +422,7 @@ Current suite entry points:
 - `TestValidateDatabase`
 - `TestDisplayUsers`
 - `TestAddDeleteUser`
+- `TestChangeUserPassword`
 - `TestReturningClause`
 - `TestExecuteBlock`
 - `TestExecuteProcedure`
@@ -472,6 +474,7 @@ Current suite entry points:
 | `TestValidateDatabase` | online database validation and diagnostic output capture | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestDisplayUsers` | read-only user display and output capture | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestAddDeleteUser` | add-user and delete-user mutation with display-based readback | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
+| `TestChangeUserPassword` | password mutation with old/new credential verification | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach`, `isc_attach_database` |
 | `TestReturningClause` | Firebird `RETURNING` row behavior | Statement execution | execute-with-output via DSQL and output XSQLDA |
 | `TestExecuteBlock` | `EXECUTE BLOCK` result row behavior | Statement execution | DSQL prepare/execute/fetch on Firebird-specific SQL |
 | `TestExecuteProcedure` | executable stored procedure singleton-row behavior | Statement execution, statement-type inspection | `isc_dsql_sql_info`, execute-with-output |
@@ -530,7 +533,7 @@ Status: completed on April 6, 2026.
 | Type-aware string binding for modern types | Jaybird, .NET, Python | Complete | Converts textual Xojo input into Firebird wire structs using utility interfaces |
 | Modern-type desktop coverage | Jaybird, .NET | Complete | Round-trip tests added for all in-scope Firebird 4/5/6 types |
 
-### Phases 3-10: Expand toward broader Firebird SDK surface
+### Phases 3-11: Expand toward broader Firebird SDK surface
 
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
@@ -538,14 +541,14 @@ Status: completed on April 6, 2026.
 | transaction info helpers | Jaybird, .NET | Complete in Phase 03 | Done |
 | explicit transaction controls | Jaybird, .NET | Complete in Phase 04 with typed TPB-backed options | Done |
 | generated-key / `AddRow` convenience | Jaybird, Xojo database API | Complete in Phase 05 through native `AddRow` callbacks | Done |
-| Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 10 completes the first backup/restore/statistics/validation/user-display/basic-user-mutation/output slice | In progress by slices |
+| Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 11 completes the first backup/restore/statistics/validation/user-display/basic-user-mutation/password-change/output slice | In progress by slices |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 10
+## Progress Summary Through Phase 11
 
-Planned through Phase 10 and now complete:
+Planned through Phase 11 and now complete:
 
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -556,13 +559,14 @@ Planned through Phase 10 and now complete:
   - backup
   - restore
   - database statistics
-  - online validation
-  - user display
-  - add user
-  - delete user
-  - service output capture
+- online validation
+- user display
+- add user
+- change user password
+- delete user
+- service output capture
 
-Still outside completed scope after Phase 10:
+Still outside completed scope after Phase 11:
 
 - broader user-management workflows
 - broader maintenance/repair services
