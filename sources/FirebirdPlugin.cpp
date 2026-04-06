@@ -3,10 +3,13 @@
 // FirebirdDatabase class, and PluginEntry().
 
 #include "FirebirdPlugin.h"
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <sstream>
 #include <ctime>
+#include <vector>
 
 // ============================================================================
 // Forward declarations — all callback functions
@@ -18,8 +21,10 @@ static REALdbCursor fbEngineTableSchema(dbDatabase *);
 static REALdbCursor fbEngineFieldSchema(dbDatabase *, REALstring table);
 static REALdbCursor fbEngineDirectSQLSelect(dbDatabase *, REALstring sql);
 static void         fbEngineDirectSQLExecute(dbDatabase *, REALstring sql);
+static void         fbEngineAddTableRecord(dbDatabase *, REALstring tableName, REALcolumnValue *values);
 static REALdbCursor fbEngineSelectSQL(dbDatabase *, REALstring sql, REALarray params);
 static void         fbEngineExecuteSQL(dbDatabase *, REALstring sql, REALarray params);
+static RBInteger    fbEngineAddRowWithReturnValue(dbDatabase *, REALstring tableName, REALcolumnValue *values, REALstring idColumnName);
 static long         fbEngineGetLastErrorCode(dbDatabase *);
 static REALstring   fbEngineGetLastErrorString(dbDatabase *);
 static void         fbEngineCommit(dbDatabase *);
@@ -87,7 +92,7 @@ static REALdbEngineDefinition sFirebirdEngine = {
     fbEngineDirectSQLSelect,
     fbEngineDirectSQLExecute,
     nullptr,                                 // createTable
-    nullptr,                                 // addTableRecord
+    fbEngineAddTableRecord,
     fbEngineSelectSQL,
     nullptr,                                 // updateFields
     nullptr,                                 // addTableColumn
@@ -106,7 +111,7 @@ static REALdbEngineDefinition sFirebirdEngine = {
     nullptr,                                 // alterColumnConstraint
     fbEnginePrepareStatement,
     fbEngineExecuteSQL,
-    nullptr,                                 // AddRowWithReturnValue
+    fbEngineAddRowWithReturnValue,
 };
 
 // --- DB Cursor Definition ---------------------------------------------------
@@ -272,6 +277,59 @@ static FirebirdDbData *GetFirebirdDbData(REALobject instance) {
     return (FirebirdDbData *)REALGetDBFromREALdbDatabase(realDb);
 }
 
+struct InsertColumnBinding {
+    std::string name;
+    std::string value;
+    int32_t type = dbTypeNull;
+    bool isNull = true;
+};
+
+static std::string UppercaseIdentifier(const std::string &value) {
+    std::string result = value;
+    for (char &ch : result) {
+        ch = (char)std::toupper((unsigned char)ch);
+    }
+    return result;
+}
+
+static bool ParseIntegerText(const std::string &text, int64_t &out) {
+    if (text.empty()) return false;
+    char *endPtr = nullptr;
+    long long value = std::strtoll(text.c_str(), &endPtr, 10);
+    if (!endPtr || *endPtr != '\0') return false;
+    out = (int64_t)value;
+    return true;
+}
+
+static bool ParseDoubleText(const std::string &text, double &out) {
+    if (text.empty()) return false;
+    char *endPtr = nullptr;
+    double value = std::strtod(text.c_str(), &endPtr);
+    if (!endPtr || *endPtr != '\0') return false;
+    out = value;
+    return true;
+}
+
+static bool ParseBooleanText(const std::string &text, bool &out) {
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (char ch : text) {
+        if (!std::isspace((unsigned char)ch)) {
+            normalized.push_back((char)std::tolower((unsigned char)ch));
+        }
+    }
+
+    if (normalized == "true" || normalized == "1" || normalized == "yes") {
+        out = true;
+        return true;
+    }
+    if (normalized == "false" || normalized == "0" || normalized == "no") {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
 static short ToXojoDbShort(short value) {
     unsigned short v = (unsigned short)value;
 #if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
@@ -428,6 +486,220 @@ static bool BindBinaryBlobValue(FBStatement *stmt, FBDatabase *db, int index, RE
     if (!ptr && size > 0) return false;
 
     stmt->bindBlob(index, *db, ptr, (size_t)size);
+    return true;
+}
+
+static void CollectInsertColumns(REALcolumnValue *values, std::vector<InsertColumnBinding> &out) {
+    out.clear();
+
+    for (REALcolumnValue *column = values; column != nullptr; column = column->nextColumn) {
+        InsertColumnBinding binding;
+        binding.name = RealToStd(column->columnName);
+        binding.type = column->columnType;
+        binding.isNull = (column->columnType == dbTypeNull) || (column->columnValue == nullptr);
+        if (!binding.isNull) {
+            binding.value = RealToStd(column->columnValue);
+        }
+        if (!binding.name.empty()) {
+            out.push_back(binding);
+        }
+    }
+}
+
+static std::string BuildInsertSQL(const std::string &tableName,
+                                  const std::vector<InsertColumnBinding> &columns,
+                                  const std::string &returningColumn)
+{
+    std::ostringstream sql;
+    sql << "INSERT INTO " << tableName << " (";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        if (i > 0) sql << ", ";
+        sql << columns[i].name;
+    }
+    sql << ") VALUES (";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        if (i > 0) sql << ", ";
+        sql << "?";
+    }
+    sql << ")";
+    if (!returningColumn.empty()) {
+        sql << " RETURNING " << returningColumn;
+    }
+    return sql.str();
+}
+
+static bool BindInsertColumn(FBStatement *stmt, FBDatabase *db, int index, const InsertColumnBinding &binding) {
+    if (!stmt || !db) return false;
+
+    if (binding.isNull || binding.type == dbTypeNull) {
+        stmt->bindNull(index);
+        return true;
+    }
+
+    switch (binding.type) {
+        case dbTypeBoolean: {
+            bool boolValue = false;
+            if (ParseBooleanText(binding.value, boolValue)) {
+                stmt->bindBoolean(index, boolValue);
+            } else {
+                stmt->bindString(index, binding.value);
+            }
+            return true;
+        }
+
+        case dbTypeByte:
+        case dbTypeShort:
+        case dbTypeLong:
+        case dbTypeInt64:
+        case dbTypeUInt64:
+        case dbTypeInt8:
+        case dbTypeUInt16:
+        case dbTypeInt32:
+        case dbTypeUInt32: {
+            int64_t intValue = 0;
+            if (ParseIntegerText(binding.value, intValue)) {
+                stmt->bindInt(index, intValue);
+            } else {
+                stmt->bindString(index, binding.value);
+            }
+            return true;
+        }
+
+        case dbTypeFloat:
+        case dbTypeDouble:
+        case dbTypeCurrency:
+        case dbTypeDecimal: {
+            double doubleValue = 0;
+            if (ParseDoubleText(binding.value, doubleValue)) {
+                stmt->bindDouble(index, doubleValue);
+            } else {
+                stmt->bindString(index, binding.value);
+            }
+            return true;
+        }
+
+        case dbTypeBinary:
+        case dbTypeLongBinary:
+            stmt->bindBlob(index, *db, binding.value.data(), binding.value.size());
+            return true;
+
+        default:
+            stmt->bindString(index, binding.value);
+            return true;
+    }
+}
+
+static bool ResolveReturningColumn(FBDatabase *db,
+                                   const std::string &tableName,
+                                   const std::string &requestedIdColumn,
+                                   std::string &outColumn)
+{
+    if (!db) return false;
+
+    if (!requestedIdColumn.empty()) {
+        outColumn = requestedIdColumn;
+        return true;
+    }
+
+    FBStatement stmt;
+    if (!stmt.prepare(*db, FBDatabase::primaryKeyColumnSQL())) return false;
+    stmt.bindString(0, UppercaseIdentifier(tableName));
+    if (!stmt.execute(*db)) return false;
+    if (!stmt.fetch() || stmt.columnCount() < 1) {
+        db->setError(-200101, "Could not determine primary key column for table " + tableName);
+        return false;
+    }
+
+    FBValue value = stmt.columnValue(0);
+    if (value.isNull || value.strVal.empty()) {
+        db->setError(-200102, "Primary key column lookup returned an empty value for table " + tableName);
+        return false;
+    }
+
+    outColumn = value.strVal;
+    return true;
+}
+
+static bool ExtractReturnedIntegerID(FBStatement &stmt, FBDatabase *db, RBInteger &outId) {
+    if (!db) return false;
+    if (!stmt.fetch() || stmt.columnCount() < 1) {
+        db->setError(-200103, "INSERT ... RETURNING did not return a row");
+        return false;
+    }
+
+    FBValue value = stmt.columnValue(0);
+    if (value.isNull) {
+        db->setError(-200104, "Generated key value was NULL");
+        return false;
+    }
+
+    int64_t idValue = 0;
+    switch (value.sqltype) {
+        case SQL_SHORT:
+        case SQL_LONG:
+        case SQL_INT64:
+            idValue = value.intVal;
+            break;
+
+        case SQL_TEXT:
+        case SQL_VARYING:
+            if (!ParseIntegerText(value.strVal, idValue)) {
+                db->setError(-200105, "Generated key value is not an integer");
+                return false;
+            }
+            break;
+
+        default:
+            db->setError(-200106, "Generated key value has an unsupported type");
+            return false;
+    }
+
+    outId = (RBInteger)idValue;
+    return true;
+}
+
+static bool ExecuteInsertFromDatabaseRow(dbDatabase *dbData,
+                                         REALstring tableName,
+                                         REALcolumnValue *values,
+                                         REALstring idColumnName,
+                                         RBInteger *outId)
+{
+    auto *fbd = (FirebirdDbData *)dbData;
+    if (!fbd || !fbd->db || !fbd->db->isConnected()) return false;
+
+    const std::string table = RealToStd(tableName);
+    if (table.empty()) {
+        fbd->db->setError(-200100, "Table name is required for AddRow");
+        return false;
+    }
+
+    std::vector<InsertColumnBinding> columns;
+    CollectInsertColumns(values, columns);
+    if (columns.empty()) {
+        fbd->db->setError(-200107, "No column values were supplied for table " + table);
+        return false;
+    }
+
+    std::string returningColumn;
+    if (outId && !ResolveReturningColumn(fbd->db, table, RealToStd(idColumnName), returningColumn)) {
+        return false;
+    }
+
+    FBStatement stmt;
+    if (!stmt.prepare(*fbd->db, BuildInsertSQL(table, columns, returningColumn))) return false;
+
+    for (int i = 0; i < (int)columns.size(); ++i) {
+        BindInsertColumn(&stmt, fbd->db, i, columns[(size_t)i]);
+    }
+
+    if (!stmt.execute(*fbd->db)) return false;
+
+    if (outId && !ExtractReturnedIntegerID(stmt, fbd->db, *outId)) return false;
+
+    if (fbd->autoCommit && fbd->db->hasActiveTransaction()) {
+        if (!fbd->db->commit()) return false;
+    }
+
     return true;
 }
 
@@ -636,6 +908,22 @@ static void fbEngineDirectSQLExecute(dbDatabase *dbData, REALstring sql) {
     if (ok && fbd->autoCommit && fbd->db->hasActiveTransaction()) {
         fbd->db->commit();
     }
+}
+
+static void fbEngineAddTableRecord(dbDatabase *dbData, REALstring tableName, REALcolumnValue *values) {
+    ExecuteInsertFromDatabaseRow(dbData, tableName, values, nullptr, nullptr);
+}
+
+static RBInteger fbEngineAddRowWithReturnValue(dbDatabase *dbData,
+                                               REALstring tableName,
+                                               REALcolumnValue *values,
+                                               REALstring idColumnName)
+{
+    RBInteger newId = 0;
+    if (!ExecuteInsertFromDatabaseRow(dbData, tableName, values, idColumnName, &newId)) {
+        return 0;
+    }
+    return newId;
 }
 
 static REALdbCursor fbEngineSelectSQL(dbDatabase *dbData, REALstring sql, REALarray params) {

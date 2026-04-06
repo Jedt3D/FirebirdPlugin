@@ -248,6 +248,7 @@ The checklist below compares the current Xojo plugin to that surface.
 - remote and local file attachment patterns
 - `SelectSQL`
 - `ExecuteSQL`
+- `Database.AddRow(...)` and generated-key return through Xojo's native insert hook
 - prepared statements
 - string, integer, double, boolean, `DateTime`, and null binding through Xojo
 - text BLOB and binary BLOB binding through Xojo prepared statements
@@ -273,9 +274,8 @@ The checklist below compares the current Xojo plugin to that surface.
 - Events API
 - Array API
 - modern interface-based API
-- configurable transaction parameter buffers and isolation controls
 - broader transaction management APIs beyond current inspection helpers
-- explicit generated keys / richer `RETURNING` handling API
+- richer `RETURNING` handling helpers beyond the native generated-key convenience path
 - batch APIs beyond repeated prepared statement execution
 
 ## Target Feature List for Firebird 4/5/6
@@ -502,6 +502,7 @@ Status: completed on April 6, 2026.
 | database info helpers | Jaybird, .NET | Complete in Phase 01 | Done |
 | transaction info helpers | Jaybird, .NET | Complete in Phase 03 | Done |
 | explicit transaction controls | Jaybird, .NET | Complete in Phase 04 with typed TPB-backed options | Done |
+| generated-key / `AddRow` convenience | Jaybird, Xojo database API | Complete in Phase 05 through native `AddRow` callbacks | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Missing | Medium |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
@@ -517,9 +518,9 @@ Status: completed on April 6, 2026.
 
 ### Do next
 
-- decide whether generated-key helpers should remain SQL-only through `RETURNING` or gain explicit convenience APIs
 - evaluate Services API scope for backup, restore, and user-management workflows
 - decide whether savepoints belong in the public Xojo surface or should stay out of scope
+- decide whether richer multi-column `RETURNING` helpers belong in the public Xojo surface
 
 ### Defer until after the above
 

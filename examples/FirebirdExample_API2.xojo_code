@@ -125,6 +125,26 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 4b: Native DatabaseRow Insert with Generated ID
+// ---------------------------------------------------------------------------
+
+Sub InsertDataWithAddRow(db As FirebirdDatabase)
+  Try
+    Var row As New DatabaseRow
+    row.Column("Name") = "Delta Echo"
+    row.Column("Email") = "delta@example.com"
+    row.Column("Balance") = 875.25
+    row.Column("Active") = True
+
+    Var newId As Integer = db.AddRow("customers", row, "")
+    System.DebugLog("Inserted row with generated id: " + newId.ToString)
+  Catch err As DatabaseException
+    System.DebugLog("AddRow error: " + err.Message)
+  End Try
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 5: Query Data with SelectSQL
 // ---------------------------------------------------------------------------
 

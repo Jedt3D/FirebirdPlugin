@@ -127,6 +127,13 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
     Var beginError As String = db.ErrorMessage
   End If
 
+  // Native Xojo DatabaseRow insert convenience
+  Var row As New DatabaseRow
+  row.Column("Name") = "GeneratedFromAddRow"
+  row.Column("Active") = True
+  row.Column("Amount") = 12.34
+  Var generatedId As Integer = db.AddRow("customers", row, "")
+
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
     db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))

@@ -164,6 +164,7 @@ public:
     // Error state
     long lastErrorCode() const { return mErrorCode; }
     const std::string &lastErrorString() const { return mErrorMsg; }
+    void setError(long code, const std::string &message);
 
     // Accessors for internal handles (used by FBStatement)
     isc_db_handle  &dbHandle()    { return mDB; }
@@ -175,6 +176,7 @@ public:
     static const char *tableListSQL();
     static const char *columnListSQL();       // needs table name parameter
     static const char *indexListSQL();         // needs table name parameter
+    static const char *primaryKeyColumnSQL();  // needs table name parameter
 
 private:
     bool databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out);
@@ -182,7 +184,6 @@ private:
     const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();
-    void setError(long code, const std::string &message);
 
     isc_db_handle   mDB = 0;
     isc_tr_handle   mTrans = 0;

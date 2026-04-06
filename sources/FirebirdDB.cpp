@@ -1036,6 +1036,15 @@ const char *FBDatabase::indexListSQL() {
            "ORDER BY I.RDB$INDEX_NAME, SEG.RDB$FIELD_POSITION";
 }
 
+const char *FBDatabase::primaryKeyColumnSQL() {
+    return "SELECT TRIM(SEG.RDB$FIELD_NAME) AS COLUMN_NAME "
+           "FROM RDB$RELATION_CONSTRAINTS RC "
+           "JOIN RDB$INDEX_SEGMENTS SEG ON SEG.RDB$INDEX_NAME = RC.RDB$INDEX_NAME "
+           "WHERE RC.RDB$CONSTRAINT_TYPE = 'PRIMARY KEY' "
+           "AND RC.RDB$RELATION_NAME = ? "
+           "ORDER BY SEG.RDB$FIELD_POSITION";
+}
+
 // ============================================================================
 // FBStatement
 // ============================================================================

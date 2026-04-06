@@ -8,6 +8,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 
 - **FirebirdDatabase** class — inherits from `Database`, works with Xojo API 2.0 patterns
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
+- `Database.AddRow(...)` support, including generated-key return for common identity-primary-key workflows
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
@@ -59,6 +60,28 @@ End Try
 ```
 
 More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOBs, Firebird 4/5/6 modern types, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
+
+## `Database.AddRow` and Generated IDs
+
+The plugin integrates with Xojo's native `DatabaseRow` insert path:
+
+```vb
+Var row As New DatabaseRow
+row.Column("Name") = "Penguins"
+row.Column("Active") = True
+row.Column("Amount") = 12.34
+
+Var newId As Integer = db.AddRow("customers", row, "")
+System.DebugLog("New row id: " + newId.ToString)
+```
+
+Behavior:
+
+- `db.AddRow("table", row)` inserts the row
+- `db.AddRow("table", row, "")` resolves the table primary key and uses `RETURNING`
+- `db.AddRow("table", row, "ID")` uses the specified ID column in `RETURNING`
+
+For custom multi-column `RETURNING`, keep using `SelectSQL("INSERT ... RETURNING ...")`.
 
 ## Firebird-Specific Metadata
 
