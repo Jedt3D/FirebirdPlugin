@@ -316,6 +316,7 @@ End
 		  TestValidateDatabase
 		  TestSweepDatabase
 		  TestListLimboTransactions
+		  TestRecoverLimboTransactions
 		  TestSetSweepInterval
 		  TestDisplayUsers
 		  TestAddDeleteUser
@@ -1923,6 +1924,94 @@ End
 		    LogFail "Services list limbo transactions", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services list limbo transactions", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestRecoverLimboTransactions()
+		  Log "-- Test: Services recover limbo transaction --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.ListLimboTransactions = False Then
+		      LogFail "RecoverLimboTransaction setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput.Trim
+		    If report <> "" Then
+		      LogPass "RecoverLimboTransaction setup: limbo transactions present; destructive recovery skipped"
+		      LogPass "CommitLimboTransaction skipped"
+		      LogPass "RollbackLimboTransaction skipped"
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var candidateId As Int64
+		    db.BeginTransaction
+		    If db.HasActiveTransaction Then
+		      candidateId = db.TransactionID
+		      db.RollbackTransaction
+		    Else
+		      LogFail "RecoverLimboTransaction setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If candidateId <= 0 Then
+		      LogFail "RecoverLimboTransaction setup", "Unable to obtain a non-limbo transaction id for recovery testing"
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.CommitLimboTransaction(candidateId) Then
+		      LogPass "CommitLimboTransaction"
+		    ElseIf db.ErrorMessage.Trim <> "" Then
+		      LogPass "CommitLimboTransaction expected rejection"
+		    Else
+		      LogFail "CommitLimboTransaction", "Expected either success or an engine error for transaction id " + candidateId.ToString
+		    End If
+		    
+		    If db.LastServiceOutput.Trim <> "" Then
+		      LogPass "CommitLimboTransaction service output"
+		    Else
+		      LogPass "CommitLimboTransaction service output: clean database produced no recovery output"
+		    End If
+		    
+		    If db.RollbackLimboTransaction(candidateId) Then
+		      LogPass "RollbackLimboTransaction"
+		    ElseIf db.ErrorMessage.Trim <> "" Then
+		      LogPass "RollbackLimboTransaction expected rejection"
+		    Else
+		      LogFail "RollbackLimboTransaction", "Expected either success or an engine error for transaction id " + candidateId.ToString
+		    End If
+		    
+		    If db.LastServiceOutput.Trim <> "" Then
+		      LogPass "RollbackLimboTransaction service output"
+		    Else
+		      LogPass "RollbackLimboTransaction service output: clean database produced no recovery output"
+		    End If
+		    
+		    If db.ListLimboTransactions Then
+		      Var followupReport As String = db.LastServiceOutput.Trim
+		      If followupReport = "" Then
+		        LogPass "RecoverLimboTransaction follow-up limbo check"
+		      Else
+		        LogPass "RecoverLimboTransaction follow-up limbo check: service returned output"
+		      End If
+		    Else
+		      LogFail "RecoverLimboTransaction follow-up limbo check", db.ErrorMessage
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services recover limbo transaction", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services recover limbo transaction", ex.Message
 		  End Try
 		  
 		  db.Close

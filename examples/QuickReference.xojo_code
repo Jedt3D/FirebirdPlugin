@@ -142,6 +142,10 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var sweepLog As String = db.LastServiceOutput
   Var limboOk As Boolean = db.ListLimboTransactions
   Var limboLog As String = db.LastServiceOutput
+  Var commitLimboOk As Boolean = db.CommitLimboTransaction(12345)
+  Var commitLimboLog As String = db.LastServiceOutput
+  Var rollbackLimboOk As Boolean = db.RollbackLimboTransaction(12345)
+  Var rollbackLimboLog As String = db.LastServiceOutput
   Var setSweepIntervalOk As Boolean = db.SetSweepInterval(20000)
   Var setSweepIntervalLog As String = db.LastServiceOutput
   Var usersOk As Boolean = db.DisplayUsers

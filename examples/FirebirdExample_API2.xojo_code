@@ -414,6 +414,20 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("Limbo transaction listing error: " + db.ErrorMessage)
     End If
 
+    If db.CommitLimboTransaction(12345) Then
+      System.DebugLog("Limbo commit request complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Limbo commit request error: " + db.ErrorMessage)
+    End If
+
+    If db.RollbackLimboTransaction(12345) Then
+      System.DebugLog("Limbo rollback request complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Limbo rollback request error: " + db.ErrorMessage)
+    End If
+
     If db.SetSweepInterval(20000) Then
       System.DebugLog("Sweep interval update complete")
       System.DebugLog(db.LastServiceOutput)

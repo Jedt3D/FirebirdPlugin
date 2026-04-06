@@ -1448,6 +1448,110 @@ bool FBDatabase::listLimboTransactions() {
     return true;
 }
 
+bool FBDatabase::commitLimboTransaction(int64_t transactionId) {
+    if (mDatabasePath.empty()) {
+        setError(-200161, "Database path is unavailable for limbo transaction commit");
+        return false;
+    }
+    if (transactionId <= 0) {
+        setError(-200162, "Limbo transaction id must be greater than zero");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200163, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200164, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertBigInt(builder, status.get(), isc_spb_rpr_commit_trans_64, transactionId);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200165, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
+bool FBDatabase::rollbackLimboTransaction(int64_t transactionId) {
+    if (mDatabasePath.empty()) {
+        setError(-200166, "Database path is unavailable for limbo transaction rollback");
+        return false;
+    }
+    if (transactionId <= 0) {
+        setError(-200167, "Limbo transaction id must be greater than zero");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200168, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200169, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_repair);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertBigInt(builder, status.get(), isc_spb_rpr_rollback_trans_64, transactionId);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200170, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
 bool FBDatabase::setSweepInterval(long interval) {
     if (mDatabasePath.empty()) {
         setError(-200156, "Database path is unavailable for sweep interval update");

@@ -171,6 +171,8 @@ public:
     bool validateDatabase();
     bool sweepDatabase();
     bool listLimboTransactions();
+    bool commitLimboTransaction(int64_t transactionId);
+    bool rollbackLimboTransaction(int64_t transactionId);
     bool setSweepInterval(long interval);
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
