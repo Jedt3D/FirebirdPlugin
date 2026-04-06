@@ -414,6 +414,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("User add error: " + db.ErrorMessage)
     End If
 
+    If db.ChangeUserPassword("EXAMPLE_PHASE10_USER", "example_secret_2") Then
+      System.DebugLog("User password change complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User password change error: " + db.ErrorMessage)
+    End If
+
     If db.DeleteUser("EXAMPLE_PHASE10_USER") Then
       System.DebugLog("User delete complete")
       System.DebugLog(db.LastServiceOutput)

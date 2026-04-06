@@ -171,6 +171,7 @@ public:
     bool validateDatabase();
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
+    bool changeUserPassword(const std::string &userName, const std::string &password);
     bool deleteUser(const std::string &userName);
     const std::string &lastServiceOutput() const { return mServiceOutput; }
 

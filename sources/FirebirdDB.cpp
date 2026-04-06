@@ -1438,6 +1438,55 @@ bool FBDatabase::addUser(const std::string &userName, const std::string &passwor
     return true;
 }
 
+bool FBDatabase::changeUserPassword(const std::string &userName, const std::string &password) {
+    if (userName.empty()) {
+        setError(-200135, "User name is required");
+        return false;
+    }
+    if (password.empty()) {
+        setError(-200136, "Password is required");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200137, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200138, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_password, password.c_str());
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200139, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
 bool FBDatabase::deleteUser(const std::string &userName) {
     if (userName.empty()) {
         setError(-200131, "User name is required");

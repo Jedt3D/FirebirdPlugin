@@ -129,15 +129,23 @@ End
 
 	#tag Method, Flags = &h1
 		Protected Function OpenTestDB() As FirebirdDatabase
+		  Return OpenTestDBWithCredentials("SYSDBA", "masterkey", True)
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Function OpenTestDBWithCredentials(userName As String, password As String, logErrors As Boolean = False) As FirebirdDatabase
 		  Var db As New FirebirdDatabase
 		  db.Host = "localhost"
 		  db.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
-		  db.UserName = "SYSDBA"
-		  db.Password = "masterkey"
+		  db.UserName = userName
+		  db.Password = password
 		  db.CharacterSet = "UTF8"
 		  
 		  If Not db.Connect Then
-		    Log "  ERROR: Could not connect -- " + db.ErrorMessage
+		    If logErrors Then
+		      Log "  ERROR: Could not connect -- " + db.ErrorMessage
+		    End If
 		    Return Nil
 		  End If
 		  
@@ -188,6 +196,7 @@ End
 		  TestValidateDatabase
 		  TestDisplayUsers
 		  TestAddDeleteUser
+		  TestChangeUserPassword
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1757,6 +1766,73 @@ End
 		  Catch ex As RuntimeException
 		    LogFail "Services add / delete user", ex.Message
 		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestChangeUserPassword()
+		  Log "-- Test: Services change user password --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var testUser As String = "XOJO_PHASE11_USER"
+		  Var oldPassword As String = "phase11_old"
+		  Var newPassword As String = "phase11_new"
+		  Var addedUser As Boolean = False
+		  
+		  Try
+		    Call db.DeleteUser(testUser)
+		    
+		    If db.AddUser(testUser, oldPassword) Then
+		      LogPass "ChangeUserPassword setup"
+		      addedUser = True
+		    Else
+		      LogFail "ChangeUserPassword setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var oldUserDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, oldPassword)
+		    If oldUserDb <> Nil Then
+		      LogPass "ChangeUserPassword old password works"
+		      oldUserDb.Close
+		    Else
+		      LogFail "ChangeUserPassword old password works", "Expected initial login with original password"
+		    End If
+		    
+		    If db.ChangeUserPassword(testUser, newPassword) Then
+		      LogPass "ChangeUserPassword"
+		    Else
+		      LogFail "ChangeUserPassword", db.ErrorMessage
+		    End If
+		    
+		    Var oldPasswordDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, oldPassword)
+		    If oldPasswordDb = Nil Then
+		      LogPass "ChangeUserPassword old password rejected"
+		    Else
+		      LogFail "ChangeUserPassword old password rejected", "Expected old password to stop working"
+		      oldPasswordDb.Close
+		    End If
+		    
+		    Var newPasswordDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, newPassword)
+		    If newPasswordDb <> Nil Then
+		      LogPass "ChangeUserPassword new password works"
+		      newPasswordDb.Close
+		    Else
+		      LogFail "ChangeUserPassword new password works", "Expected login with new password"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services change user password", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services change user password", ex.Message
+		  End Try
+		  
+		  If addedUser Then
+		    Call db.DeleteUser(testUser)
+		  End If
 		  
 		  db.Close
 		End Sub
