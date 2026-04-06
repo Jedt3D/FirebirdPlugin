@@ -541,13 +541,19 @@ bool CollectServiceQueryResult(const std::vector<char> &result, std::string &out
                 keepPolling = true;
                 break;
 
-            case isc_info_svc_line: {
+            case isc_info_svc_line:
+            case isc_info_svc_to_eof: {
                 if (pos + 2 > result.size()) return false;
                 uint16_t len = (uint16_t)isc_vax_integer(&result[pos], 2);
                 pos += 2;
                 if (pos + len > result.size()) return false;
                 if (len > 0) {
-                    output.append(&result[pos], &result[pos + len]);
+                    for (size_t i = pos; i < pos + len; ++i) {
+                        unsigned char ch = (unsigned char)result[i];
+                        if (ch >= 32 || ch == '\t' || ch == '\r' || ch == '\n') {
+                            output.push_back((char)ch);
+                        }
+                    }
                     output.push_back('\n');
                     keepPolling = true;
                 }
@@ -907,7 +913,7 @@ bool FBDatabase::runServiceRequest(const std::vector<char> &request, std::string
         ok = false;
     } else {
         const unsigned char receiveItems[] = { isc_info_svc_line };
-        std::vector<char> result(1024, 0);
+        std::vector<char> result(8192, 0);
 
         for (;;) {
             if (isc_service_query(mStatus, &service, nullptr, 0, nullptr,
@@ -1379,7 +1385,6 @@ bool FBDatabase::displayUsers() {
 
     std::string output;
     if (!runServiceRequest(request, output)) return false;
-
     if (output.empty()) {
         setError(-200125, "User display returned no output");
         return false;
@@ -1477,6 +1482,98 @@ bool FBDatabase::changeUserPassword(const std::string &userName, const std::stri
 
     if (!status.ok() || request.empty()) {
         setError(-200139, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
+bool FBDatabase::setUserAdmin(const std::string &userName, bool isAdmin) {
+    if (userName.empty()) {
+        setError(-200140, "User name is required");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200141, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200142, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
+    IXpbBuilder_insertInt(builder, status.get(), isc_spb_sec_admin, isAdmin ? 1 : 0);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200143, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
+bool FBDatabase::updateUserNames(const std::string &userName, const std::string &firstName, const std::string &middleName, const std::string &lastName) {
+    if (userName.empty()) {
+        setError(-200144, "User name is required");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200145, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200146, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_modify_user);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_username, userName.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_firstname, firstName.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_middlename, middleName.c_str());
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_sec_lastname, lastName.c_str());
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200147, FormatInterfaceStatus(status.get()));
         return false;
     }
 

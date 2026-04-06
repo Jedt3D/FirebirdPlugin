@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `DeleteUser`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -167,6 +167,8 @@ Phases 06-11 add a narrow operational surface over the Firebird service manager:
 - `DisplayUsers() As Boolean`
 - `AddUser(userName As String, password As String) As Boolean`
 - `ChangeUserPassword(userName As String, password As String) As Boolean`
+- `SetUserAdmin(userName As String, isAdmin As Boolean) As Boolean`
+- `UpdateUserNames(userName As String, firstName As String, middleName As String, lastName As String) As Boolean`
 - `DeleteUser(userName As String) As Boolean`
 - `LastServiceOutput() As String`
 
@@ -209,6 +211,16 @@ If db.ChangeUserPassword("XOJO_DEMO_USER", "demo_secret_2") Then
   System.DebugLog(db.LastServiceOutput)
 End If
 
+If db.SetUserAdmin("XOJO_DEMO_USER", True) Then
+  System.DebugLog("User admin flag updated")
+  System.DebugLog(db.LastServiceOutput)
+End If
+
+If db.UpdateUserNames("XOJO_DEMO_USER", "Xojo", "Demo", "User") Then
+  System.DebugLog("User names updated")
+  System.DebugLog(db.LastServiceOutput)
+End If
+
 If db.DeleteUser("XOJO_DEMO_USER") Then
   System.DebugLog("User delete complete")
   System.DebugLog(db.LastServiceOutput)
@@ -222,8 +234,9 @@ Notes:
 - `DatabaseStatistics()` runs Firebird database statistics for the currently connected database
 - `ValidateDatabase()` runs Firebird's online validation service for the currently connected database
 - `DisplayUsers()` runs Firebird's read-only user display service action
-- `AddUser()`, `ChangeUserPassword()`, and `DeleteUser()` run Firebird's security service actions for basic user mutation
+- `AddUser()`, `ChangeUserPassword()`, `SetUserAdmin()`, `UpdateUserNames()`, and `DeleteUser()` run Firebird's security service actions for user mutation
 - `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, validation, user-display, or user-mutation operation
+- authoritative verification for admin/name mutation is best done through login behavior or `SEC$USERS`, not by scraping formatted `DisplayUsers()` text
 
 ## PreparedStatement Type Binds
 

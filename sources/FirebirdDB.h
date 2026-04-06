@@ -172,6 +172,8 @@ public:
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
     bool changeUserPassword(const std::string &userName, const std::string &password);
+    bool setUserAdmin(const std::string &userName, bool isAdmin);
+    bool updateUserNames(const std::string &userName, const std::string &firstName, const std::string &middleName, const std::string &lastName);
     bool deleteUser(const std::string &userName);
     const std::string &lastServiceOutput() const { return mServiceOutput; }
 

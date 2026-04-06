@@ -67,6 +67,8 @@ static RBBoolean    fbClassValidateDatabase(REALobject instance);
 static RBBoolean    fbClassDisplayUsers(REALobject instance);
 static RBBoolean    fbClassAddUser(REALobject instance, REALstring userName, REALstring password);
 static RBBoolean    fbClassChangeUserPassword(REALobject instance, REALstring userName, REALstring password);
+static RBBoolean    fbClassSetUserAdmin(REALobject instance, REALstring userName, RBBoolean isAdmin);
+static RBBoolean    fbClassUpdateUserNames(REALobject instance, REALstring userName, REALstring firstName, REALstring middleName, REALstring lastName);
 static RBBoolean    fbClassDeleteUser(REALobject instance, REALstring userName);
 static REALstring   fbClassLastServiceOutput(REALobject instance);
 
@@ -190,6 +192,8 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassDisplayUsers, REALnoImplementation, "DisplayUsers() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassAddUser, REALnoImplementation, "AddUser(userName As String, password As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassChangeUserPassword, REALnoImplementation, "ChangeUserPassword(userName As String, password As String) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassSetUserAdmin, REALnoImplementation, "SetUserAdmin(userName As String, isAdmin As Boolean) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassUpdateUserNames, REALnoImplementation, "UpdateUserNames(userName As String, firstName As String, middleName As String, lastName As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDeleteUser, REALnoImplementation, "DeleteUser(userName As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassLastServiceOutput, REALnoImplementation, "LastServiceOutput() As String", REALconsoleSafe },
 };
@@ -1560,6 +1564,18 @@ static RBBoolean fbClassChangeUserPassword(REALobject instance, REALstring userN
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->changeUserPassword(RealToStd(userName), RealToStd(password));
+}
+
+static RBBoolean fbClassSetUserAdmin(REALobject instance, REALstring userName, RBBoolean isAdmin) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->setUserAdmin(RealToStd(userName), isAdmin != 0);
+}
+
+static RBBoolean fbClassUpdateUserNames(REALobject instance, REALstring userName, REALstring firstName, REALstring middleName, REALstring lastName) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->updateUserNames(RealToStd(userName), RealToStd(firstName), RealToStd(middleName), RealToStd(lastName));
 }
 
 static RBBoolean fbClassDeleteUser(REALobject instance, REALstring userName) {

@@ -421,6 +421,20 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("User password change error: " + db.ErrorMessage)
     End If
 
+    If db.SetUserAdmin("EXAMPLE_PHASE10_USER", True) Then
+      System.DebugLog("User admin flag updated")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User admin flag error: " + db.ErrorMessage)
+    End If
+
+    If db.UpdateUserNames("EXAMPLE_PHASE10_USER", "Example", "Phase", "User") Then
+      System.DebugLog("User names updated")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("User names error: " + db.ErrorMessage)
+    End If
+
     If db.DeleteUser("EXAMPLE_PHASE10_USER") Then
       System.DebugLog("User delete complete")
       System.DebugLog(db.LastServiceOutput)

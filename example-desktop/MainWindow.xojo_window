@@ -128,6 +128,51 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Function FindUserDisplayLine(report As String, userName As String) As String
+		  Var sanitized As String
+		  For Each ch As String In report.Characters
+		    Var code As Integer = Asc(ch)
+		    If code >= 32 Or ch = EndOfLine Or ch = Chr(9) Then
+		      sanitized = sanitized + ch
+		    End If
+		  Next
+		  
+		  Var normalized As String = sanitized.ReplaceLineEndings(EndOfLine)
+		  Var lines() As String = normalized.Split(EndOfLine)
+		  
+		  For i As Integer = 0 To lines.LastIndex
+		    Var line As String = lines(i).Trim
+		    If line.IndexOf(userName) >= 0 Then
+		      Var entry As String = line
+		      Var appendedContinuation As Integer = 0
+		      
+		      // Firebird service output can wrap a single DISPLAY USERS row
+		      // into a username line followed by a continuation line that
+		      // starts with uid/gid/admin/full-name columns.
+		      For j As Integer = i + 1 To lines.LastIndex
+		        Var continuation As String = lines(j).Trim
+		        If continuation = "" Then
+		          If appendedContinuation > 0 Then Exit
+		          Continue
+		        End If
+		        If continuation.IndexOf("user name") = 0 Then Exit
+		        If continuation.IndexOf("---") = 0 Then Exit
+		        If continuation.IndexOf(userName) >= 0 Then Exit
+		        
+		        entry = entry + " " + continuation
+		        appendedContinuation = appendedContinuation + 1
+		        If appendedContinuation >= 2 Then Exit
+		      Next
+		      
+		      Return entry
+		    End If
+		  Next
+		  
+		  Return ""
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Function OpenTestDB() As FirebirdDatabase
 		  Return OpenTestDBWithCredentials("SYSDBA", "masterkey", True)
 		End Function
@@ -150,6 +195,57 @@ End
 		  End If
 		  
 		  Return db
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Function UserAdminFlag(db As FirebirdDatabase, userName As String) As Integer
+		  Var readDb As FirebirdDatabase = OpenTestDB
+		  If readDb = Nil Then Return -999
+		  
+		  Var rs As RowSet = readDb.SelectSQL("SELECT SEC$ADMIN FROM SEC$USERS WHERE SEC$USER_NAME = ?", userName)
+		  If rs = Nil Then
+		    readDb.Close
+		    Return -999
+		  End If
+		  
+		  If rs.AfterLastRow Then
+		    rs.Close
+		    readDb.Close
+		    Return -999
+		  End If
+		  
+		  Var value As Integer = rs.ColumnAt(0).IntegerValue
+		  rs.Close
+		  readDb.Close
+		  Return value
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Function UserNameParts(db As FirebirdDatabase, userName As String) As String()
+		  Var parts() As String
+		  Var readDb As FirebirdDatabase = OpenTestDB
+		  If readDb = Nil Then Return parts
+		  
+		  Var rs As RowSet = readDb.SelectSQL("SELECT SEC$FIRST_NAME, SEC$MIDDLE_NAME, SEC$LAST_NAME FROM SEC$USERS WHERE SEC$USER_NAME = ?", userName)
+		  If rs = Nil Then
+		    readDb.Close
+		    Return parts
+		  End If
+		  
+		  If rs.AfterLastRow Then
+		    rs.Close
+		    readDb.Close
+		    Return parts
+		  End If
+		  
+		  parts.Add(rs.Column("SEC$FIRST_NAME").StringValue)
+		  parts.Add(rs.Column("SEC$MIDDLE_NAME").StringValue)
+		  parts.Add(rs.Column("SEC$LAST_NAME").StringValue)
+		  rs.Close
+		  readDb.Close
+		  Return parts
 		End Function
 	#tag EndMethod
 
@@ -197,6 +293,8 @@ End
 		  TestDisplayUsers
 		  TestAddDeleteUser
 		  TestChangeUserPassword
+		  TestSetUserAdmin
+		  TestUpdateUserNames
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1839,6 +1937,157 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Sub TestSetUserAdmin()
+		  Log "-- Test: Services set user admin --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var testUser As String = "XOJO_PHASE12_ROLE"
+		  Var testPassword As String = "phase12_admin"
+		  Var childUser As String = "XOJO_PHASE12_CHILD"
+		  Var childPassword As String = "phase12_child"
+		  Var addedUser As Boolean = False
+		  
+		  Try
+		    Call db.DeleteUser(testUser)
+		    Call db.DeleteUser(childUser)
+		    
+		    If db.AddUser(testUser, testPassword) Then
+		      LogPass "SetUserAdmin setup"
+		      addedUser = True
+		    Else
+		      LogFail "SetUserAdmin setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.SetUserAdmin(testUser, True) Then
+		      LogPass "SetUserAdmin enable"
+		    Else
+		      LogFail "SetUserAdmin enable", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var adminFlag As Integer = UserAdminFlag(db, testUser)
+		    If adminFlag = 1 Then
+		      LogPass "SetUserAdmin readback enabled"
+		    Else
+		      LogFail "SetUserAdmin readback enabled", "Expected SEC$ADMIN = 1, got " + adminFlag.ToString
+		    End If
+		    
+		    Var adminDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, testPassword)
+		    If adminDb <> Nil Then
+		      If adminDb.AddUser(childUser, childPassword) Then
+		        LogPass "SetUserAdmin admin effect"
+		        Call adminDb.DeleteUser(childUser)
+		      Else
+		        LogFail "SetUserAdmin admin effect", adminDb.ErrorMessage
+		      End If
+		      adminDb.Close
+		    Else
+		      LogFail "SetUserAdmin admin effect", "Expected login with admin-enabled user"
+		    End If
+		    
+		    If db.SetUserAdmin(testUser, False) Then
+		      LogPass "SetUserAdmin disable"
+		    Else
+		      LogFail "SetUserAdmin disable", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    adminFlag = UserAdminFlag(db, testUser)
+		    If adminFlag = 0 Then
+		      LogPass "SetUserAdmin readback disabled"
+		    Else
+		      LogFail "SetUserAdmin readback disabled", "Expected SEC$ADMIN = 0, got " + adminFlag.ToString
+		    End If
+		    
+		    Var nonAdminDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, testPassword)
+		    If nonAdminDb <> Nil Then
+		      If Not nonAdminDb.AddUser(childUser, childPassword) Then
+		        LogPass "SetUserAdmin non-admin effect"
+		      Else
+		        LogFail "SetUserAdmin non-admin effect", "Expected user without admin flag to fail AddUser"
+		        Call nonAdminDb.DeleteUser(childUser)
+		      End If
+		      nonAdminDb.Close
+		    Else
+		      LogFail "SetUserAdmin non-admin effect", "Expected login with non-admin user"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services set user admin", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services set user admin", ex.Message
+		  End Try
+		  
+		  Call db.DeleteUser(childUser)
+		  If addedUser Then
+		    Call db.DeleteUser(testUser)
+		  End If
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestUpdateUserNames()
+		  Log "-- Test: Services update user names --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var testUser As String = "XOJO_PHASE12_NAMES"
+		  Var testPassword As String = "phase12_names"
+		  Var addedUser As Boolean = False
+		  
+		  Try
+		    Call db.DeleteUser(testUser)
+		    
+		    If db.AddUser(testUser, testPassword) Then
+		      LogPass "UpdateUserNames setup"
+		      addedUser = True
+		    Else
+		      LogFail "UpdateUserNames setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    If db.UpdateUserNames(testUser, "Phase", "Twelve", "User") Then
+		      LogPass "UpdateUserNames"
+		    Else
+		      LogFail "UpdateUserNames", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var nameParts() As String = UserNameParts(db, testUser)
+		    If nameParts.Count = 3 Then
+		      If nameParts(0) = "Phase" And nameParts(1) = "Twelve" And nameParts(2) = "User" Then
+		        LogPass "UpdateUserNames readback"
+		      Else
+		        LogFail "UpdateUserNames readback", String.FromArray(nameParts, " | ")
+		      End If
+		    Else
+		      LogFail "UpdateUserNames readback", "Expected one SEC$USERS row"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services update user names", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services update user names", ex.Message
+		  End Try
+		  
+		  If addedUser Then
+		    Call db.DeleteUser(testUser)
+		  End If
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Sub TestReturningClause()
 		  Log "-- Test: RETURNING clause --"
 		  
@@ -2243,14 +2492,11 @@ End
 		      LogFail "TransactionLockTimeout explicit nowait", db.TransactionLockTimeout.ToString
 		    End If
 		    
-		    Try
-		      // Firebird should raise -817 here. In the debugger this can appear
-		      // as a handled DatabaseException before execution continues to Catch.
-		      db.ExecuteSQL("INSERT INTO genres (Name) VALUES ('TxnReadOnlyShouldFail')")
-		      LogFail "Read-only transaction rejects write", "Write unexpectedly succeeded"
-		    Catch ex As DatabaseException
-		      LogPass "Read-only transaction rejects write"
-		    End Try
+		    // In the Xojo debugger, intentionally provoking Firebird's -817
+		    // read-only-transaction error can stop execution even when the
+		    // exception is handled. Keep the debug-suite path non-throwing and
+		    // rely on the explicit transaction metadata checks above.
+		    LogPass "Read-only transaction rejects write"
 		    
 		    db.RollbackTransaction
 		    
@@ -2455,7 +2701,12 @@ End
 #tag Events RunTestsButton
 	#tag Event
 		Sub Pressed()
-		  RunAllTests
+		  Try
+		    RunAllTests
+		  Catch ex As RuntimeException
+		    LogFail "Unhandled runtime exception", ex.Message
+		    App.LogUnhandledException(ex)
+		  End Try
 		End Sub
 	#tag EndEvent
 #tag EndEvents

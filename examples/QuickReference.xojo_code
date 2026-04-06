@@ -142,6 +142,10 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var usersLog As String = db.LastServiceOutput
   Var addUserOk As Boolean = db.AddUser("QUICKREF_USER", "quickref_secret")
   Var addUserLog As String = db.LastServiceOutput
+  Var setAdminOk As Boolean = db.SetUserAdmin("QUICKREF_USER", True)
+  Var setAdminLog As String = db.LastServiceOutput
+  Var updateNamesOk As Boolean = db.UpdateUserNames("QUICKREF_USER", "Quick", "Ref", "User")
+  Var updateNamesLog As String = db.LastServiceOutput
   Var changePasswordOk As Boolean = db.ChangeUserPassword("QUICKREF_USER", "quickref_secret_2")
   Var changePasswordLog As String = db.LastServiceOutput
   Var deleteUserOk As Boolean = db.DeleteUser("QUICKREF_USER")
