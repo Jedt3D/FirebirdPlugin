@@ -206,7 +206,7 @@ The checklist below compares the current Xojo plugin to that surface.
 | Remote and local attachment | attach string and client library behavior | `[x]` | Remote and embedded-style local attachment supported by connection string construction |
 | Transaction begin/commit/rollback | `isc_start_transaction`, `isc_commit_transaction`, `isc_rollback_transaction` | `[x]` | Current Xojo API exposes begin/commit/rollback |
 | Auto-start transaction for statement execution | driver-level behavior on top of transaction API | `[x]` | Implemented by `ensureTransaction()` and plugin auto-commit behavior |
-| Custom TPB / isolation exposure | transaction parameter buffer control | `[ ]` | Not exposed at Xojo level; Jaybird should guide eventual design |
+| Custom TPB / isolation exposure | transaction parameter buffer control | `[-]` | Phase 04 exposes common TPB-backed options for isolation, access mode, and lock timeout through `BeginTransactionWithOptions`, but not arbitrary TPB composition |
 | Dynamic SQL prepare | `isc_dsql_allocate_statement`, `isc_dsql_prepare` | `[x]` | Used for both `SelectSQL` and prepared statements |
 | Parameter metadata | `isc_dsql_describe_bind` | `[x]` | Used internally |
 | Result metadata | `isc_dsql_describe` | `[x]` | Used internally to map output columns |
@@ -239,6 +239,21 @@ The checklist below compares the current Xojo plugin to that surface.
 | `TIME WITH TIME ZONE` support | newer data type support | `[x]` | Exposed through `StringValue` and type-aware string binding |
 | `TIMESTAMP WITH TIME ZONE` support | newer data type support | `[x]` | Exposed through `StringValue` and type-aware string binding |
 | Interface-based API | `fb_get_master_interface()`, `Interfaces.h` | `[ ]` | Current plugin is entirely on legacy `isc_*` API |
+
+## Phase Progress Checklist
+
+This table tracks implementation progress against the plan through the currently completed phases.
+
+| Phase | Scope | Status | Verification | Branch | Commit | Article |
+| --- | --- | --- | --- | --- | --- | --- |
+| 01 | database info helpers, temporal binds, BLOB binds, Firebird-specific SQL coverage stabilization | Complete | `68 passed, 0 failed` | `feature/phase-01` | `fa844a2` | `phase_01_article.md` |
+| 02 | Firebird 4/5/6 modern type mapping and round-trip coverage | Complete | `78 passed, 0 failed` | `feature/phase-02` | `fe81a41` | `phase_02_article.md` |
+| 03 | transaction info helpers | Complete | `86 passed, 0 failed` | `feature/phase-03` | `3760c15` | `phase_03_article.md` |
+| 04 | explicit TPB-backed transaction controls | Complete | `96 passed, 0 failed` | `feature/phase-04` | `fccc82f` | `phase_04_article.md` |
+| 05 | generated-key convenience through native Xojo `AddRow` hooks | Complete | `100 passed, 0 failed` | `feature/phase-05` | `fef5dcd` | `phase_05_article.md` |
+| 06 | Services API backup and restore slice | Complete | `107 passed, 0 failed` | `feature/phase-06` | `9910e8c` | `phase_06_article.md` |
+| 07 | Services API database statistics slice | Complete | `110 passed, 0 failed` | `feature/phase-07` | `66d6c00` | `phase_07_article.md` |
+| 08 | Services API online validation slice | Complete | `113 passed, 0 failed` | `feature/phase-08` | `303fa7c` | `phase_08_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -384,6 +399,7 @@ Current suite entry points:
 - `TestTransaction`
 - `TestTransactionRollback`
 - `TestTransactionInfo`
+- `TestTransactionOptions`
 - `TestPreparedStatementSelect`
 - `TestPreparedStatementExecute`
 - `TestPreparedStatementBindTypes`
@@ -400,6 +416,7 @@ Current suite entry points:
 - `TestDatabaseAddRowWithReturnValue`
 - `TestServicesBackupRestore`
 - `TestDatabaseStatistics`
+- `TestValidateDatabase`
 - `TestReturningClause`
 - `TestExecuteBlock`
 - `TestExecuteProcedure`
@@ -431,6 +448,7 @@ Current suite entry points:
 | `TestTransaction` | committed insert persists | Transaction control | `isc_start_transaction`, `isc_commit_transaction` |
 | `TestTransactionRollback` | rolled-back insert disappears | Transaction control | `isc_start_transaction`, `isc_rollback_transaction` |
 | `TestTransactionInfo` | active transaction state, id, isolation, access mode, lock timeout | Transaction control, informational functions | `isc_start_transaction`, `isc_transaction_info`, `isc_commit_transaction` |
+| `TestTransactionOptions` | explicit TPB-backed transaction options and read-only enforcement | Transaction control | `isc_start_transaction` with TPB options, `isc_transaction_info`, `isc_commit_transaction`, `isc_rollback_transaction` |
 | `TestPreparedStatementSelect` | prepared select with bound parameter | Statement execution, parameter metadata | allocate/prepare/describe_bind/execute/fetch |
 | `TestPreparedStatementExecute` | prepared insert | Statement execution | allocate/prepare/execute |
 | `TestPreparedStatementBindTypes` | string, int64, double, boolean binds and readback | Statement execution, type conversions | XSQLDA input binding for text/numeric/boolean |
@@ -506,7 +524,7 @@ Status: completed on April 6, 2026.
 | Type-aware string binding for modern types | Jaybird, .NET, Python | Complete | Converts textual Xojo input into Firebird wire structs using utility interfaces |
 | Modern-type desktop coverage | Jaybird, .NET | Complete | Round-trip tests added for all in-scope Firebird 4/5/6 types |
 
-### Phase 3: Expand toward broader Firebird SDK surface
+### Phases 3-8: Expand toward broader Firebird SDK surface
 
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
@@ -514,10 +532,34 @@ Status: completed on April 6, 2026.
 | transaction info helpers | Jaybird, .NET | Complete in Phase 03 | Done |
 | explicit transaction controls | Jaybird, .NET | Complete in Phase 04 with typed TPB-backed options | Done |
 | generated-key / `AddRow` convenience | Jaybird, Xojo database API | Complete in Phase 05 through native `AddRow` callbacks | Done |
-| Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 08 completes the first backup/restore/statistics/validation/output slice | Medium |
+| Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 08 completes the first backup/restore/statistics/validation/output slice | In progress by slices |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
+
+## Progress Summary Through Phase 08
+
+Planned through Phase 08 and now complete:
+
+- database info helpers
+- Firebird 4/5/6 modern type support
+- transaction info helpers
+- explicit TPB-backed transaction options
+- generated-key convenience through native `AddRow`
+- Services API first slice:
+  - backup
+  - restore
+  - database statistics
+  - online validation
+  - service output capture
+
+Still outside completed scope after Phase 08:
+
+- user-management services
+- broader maintenance/repair services
+- event API
+- array API
+- interface-based API migration
 
 ## Explicit Checklist for Next Engineering Pass
 
