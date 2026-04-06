@@ -45,6 +45,12 @@
 #define isc_encode_timestamp ptr_isc_encode_timestamp
 #endif
 
+#if __has_include(<firebird/fb_c_api.h>) && !(defined(_WIN64) && defined(__aarch64__))
+#define FB_HAS_MODERN_API 1
+#else
+#define FB_HAS_MODERN_API 0
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -54,10 +60,74 @@
 #include <sstream>
 
 extern "C" {
+#if FB_HAS_MODERN_API
+#include <firebird/fb_c_api.h>
+#else
 #include <ibase.h>
+#endif
 }
 
 namespace {
+
+#if FB_HAS_MODERN_API
+
+struct FirebirdUtilityInterfaces {
+    IMaster *master = nullptr;
+    IUtil *util = nullptr;
+    IDecFloat16 *dec16 = nullptr;
+    IDecFloat34 *dec34 = nullptr;
+    IInt128 *int128 = nullptr;
+
+    FirebirdUtilityInterfaces() {
+        master = fb_get_master_interface();
+        if (!master) return;
+
+        util = IMaster_getUtilInterface(master);
+        if (!util) return;
+
+        IStatus *status = IMaster_getStatus(master);
+        if (!status) return;
+
+        IStatus_init(status);
+        dec16 = IUtil_getDecFloat16(util, status);
+        IStatus_init(status);
+        dec34 = IUtil_getDecFloat34(util, status);
+        IStatus_init(status);
+        int128 = IUtil_getInt128(util, status);
+        IStatus_dispose(status);
+    }
+};
+
+FirebirdUtilityInterfaces &GetFirebirdUtilities() {
+    static FirebirdUtilityInterfaces utilities;
+    return utilities;
+}
+
+class FirebirdStatusScope {
+public:
+    FirebirdStatusScope() {
+        auto &utilities = GetFirebirdUtilities();
+        if (utilities.master) {
+            mStatus = IMaster_getStatus(utilities.master);
+            if (mStatus) IStatus_init(mStatus);
+        }
+    }
+
+    ~FirebirdStatusScope() {
+        if (mStatus) IStatus_dispose(mStatus);
+    }
+
+    IStatus *get() const { return mStatus; }
+
+    bool ok() const {
+        return mStatus && !(IStatus_getState(mStatus) & IStatus_STATE_ERRORS);
+    }
+
+private:
+    IStatus *mStatus = nullptr;
+};
+
+#else
 
 // Forward declarations for Firebird modern interfaces (not supported in this build)
 struct IStatus;
@@ -116,6 +186,8 @@ public:
     void* get() const { return nullptr; }
     bool ok() const { return false; }
 };
+
+#endif
 
 bool ParseUnsignedComponent(const std::string &text, unsigned maxValue, unsigned &out) {
     if (text.empty()) return false;
@@ -176,6 +248,88 @@ bool ParseDateLiteral(const std::string &text, unsigned &year, unsigned &month, 
            ParseUnsignedComponent(dayPart, 31, day);
 }
 
+#if FB_HAS_MODERN_API
+
+bool FormatInt128Value(const FB_I128 &value, short scale, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.int128) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IInt128_STRING_SIZE + 1> buffer = {};
+    IInt128_toString(utilities.int128, status.get(), &value, scale, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseInt128Value(const std::string &text, short scale, FB_I128 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.int128) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IInt128_fromString(utilities.int128, status.get(), scale, text.c_str(), &out);
+    return status.ok();
+}
+
+bool FormatDecFloat16Value(const FB_DEC16 &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec16) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IDecFloat16_STRING_SIZE + 1> buffer = {};
+    IDecFloat16_toString(utilities.dec16, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseDecFloat16Value(const std::string &text, FB_DEC16 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec16) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IDecFloat16_fromString(utilities.dec16, status.get(), text.c_str(), &out);
+    return status.ok();
+}
+
+bool FormatDecFloat34Value(const FB_DEC34 &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec34) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    std::array<char, IDecFloat34_STRING_SIZE + 1> buffer = {};
+    IDecFloat34_toString(utilities.dec34, status.get(), &value, (unsigned)buffer.size(), buffer.data());
+    if (!status.ok()) return false;
+
+    out.assign(buffer.data());
+    return true;
+}
+
+bool ParseDecFloat34Value(const std::string &text, FB_DEC34 &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.dec34) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IDecFloat34_fromString(utilities.dec34, status.get(), text.c_str(), &out);
+    return status.ok();
+}
+
+#else
+
 bool FormatInt128Value(const FB_I128 &value, short scale, std::string &out) {
     // Modern Firebird INT128 support not available
     return false;
@@ -205,6 +359,8 @@ bool ParseDecFloat34Value(const std::string &text, FB_DEC34 &out) {
     // Modern Firebird DECFLOAT support not available
     return false;
 }
+
+#endif
 
 std::string FormatTimeZoneText(unsigned hour,
                                unsigned minute,
@@ -247,6 +403,162 @@ std::string FormatTimestampZoneText(unsigned year,
     if (timeZone && *timeZone) out << ' ' << timeZone;
     return out.str();
 }
+
+#if FB_HAS_MODERN_API
+
+bool FormatTimeTzValue(const ISC_TIME_TZ &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeTz(utilities.util, status.get(), &value,
+                       &hour, &minute, &second, &fractions,
+                       (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimeZoneText(hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool FormatTimeTzExValue(const ISC_TIME_TZ_EX &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeTzEx(utilities.util, status.get(), &value,
+                         &hour, &minute, &second, &fractions,
+                         (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimeZoneText(hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool ParseTimeTzValue(const std::string &text, ISC_TIME_TZ &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    size_t split = text.find_last_of(' ');
+    if (split == std::string::npos) return false;
+
+    std::string timePart = text.substr(0, split);
+    std::string zonePart = text.substr(split + 1);
+
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    if (!ParseTimeLiteral(timePart, hour, minute, second, fractions)) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IUtil_encodeTimeTz(utilities.util, status.get(), &out, hour, minute, second, fractions, zonePart.c_str());
+    return status.ok();
+}
+
+bool FormatTimestampTzValue(const ISC_TIMESTAMP_TZ &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeStampTz(utilities.util, status.get(), &value,
+                            &year, &month, &day, &hour, &minute, &second, &fractions,
+                            (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimestampZoneText(year, month, day, hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool FormatTimestampTzExValue(const ISC_TIMESTAMP_TZ_EX &value, std::string &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+    std::array<char, 128> timeZone = {};
+
+    IUtil_decodeTimeStampTzEx(utilities.util, status.get(), &value,
+                              &year, &month, &day, &hour, &minute, &second, &fractions,
+                              (unsigned)timeZone.size(), timeZone.data());
+    if (!status.ok()) return false;
+
+    out = FormatTimestampZoneText(year, month, day, hour, minute, second, fractions, timeZone.data());
+    return true;
+}
+
+bool ParseTimestampTzValue(const std::string &text, ISC_TIMESTAMP_TZ &out) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!utilities.util) return false;
+
+    size_t split = text.find_last_of(' ');
+    if (split == std::string::npos) return false;
+
+    std::string timestampPart = text.substr(0, split);
+    std::string zonePart = text.substr(split + 1);
+
+    size_t spacePos = timestampPart.find(' ');
+    if (spacePos == std::string::npos) return false;
+
+    std::string datePart = timestampPart.substr(0, spacePos);
+    std::string timePart = timestampPart.substr(spacePos + 1);
+
+    unsigned year = 0;
+    unsigned month = 0;
+    unsigned day = 0;
+    unsigned hour = 0;
+    unsigned minute = 0;
+    unsigned second = 0;
+    unsigned fractions = 0;
+
+    if (!ParseDateLiteral(datePart, year, month, day)) return false;
+    if (!ParseTimeLiteral(timePart, hour, minute, second, fractions)) return false;
+
+    FirebirdStatusScope status;
+    if (!status.get()) return false;
+
+    IUtil_encodeTimeStampTz(utilities.util, status.get(), &out,
+                            year, month, day, hour, minute, second, fractions, zonePart.c_str());
+    return status.ok();
+}
+
+#else
 
 bool FormatTimeTzValue(const ISC_TIME_TZ &value, std::string &out) {
     // Modern Firebird TIMEZONE support not available
@@ -301,6 +613,8 @@ bool ParseTimestampTzValue(const std::string &text, ISC_TIMESTAMP_TZ &out) {
     // Modern Firebird TIMESTAMP_TZ support not available
     return false;
 }
+
+#endif
 
 std::string NormalizeTextToken(const std::string &text) {
     std::string normalized;
@@ -467,6 +781,16 @@ bool CollectServiceQueryResult(const std::vector<char> &result, std::string &out
     return true;
 }
 
+#if FB_HAS_MODERN_API
+std::string FormatInterfaceStatus(IStatus *status) {
+    auto &utilities = GetFirebirdUtilities();
+    if (!status || !utilities.util) return "Firebird interface error";
+
+    std::array<char, 1024> buffer = {};
+    IUtil_formatStatus(utilities.util, buffer.data(), (unsigned)buffer.size(), status);
+    return std::string(buffer.data());
+}
+#else
 // Modern interface status formatting stub - Firebird 5.0.3 compatibility
 std::string FormatInterfaceStatus(void *status) {
     return "Firebird interface error";
@@ -494,6 +818,75 @@ extern "C" {
     void IXpbBuilder_insertBytes(IXpbBuilder* builder, void* status, unsigned tag, const void* data, unsigned length) {}
     unsigned IXpbBuilder_getBufferLength(IXpbBuilder* builder, void* status) { return 0; }
     const unsigned char* IXpbBuilder_getBuffer(IXpbBuilder* builder, void* status) { return nullptr; }
+}
+#endif
+
+int QueryStatementTypeHandle(isc_stmt_handle stmtHandle) {
+    if (!stmtHandle) return 0;
+
+    char typeItem[] = { isc_info_sql_stmt_type };
+    char infoBuffer[20];
+    memset(infoBuffer, 0, sizeof(infoBuffer));
+
+    ISC_STATUS_ARRAY status = {};
+    if (isc_dsql_sql_info(status, &stmtHandle, sizeof(typeItem), typeItem,
+                          sizeof(infoBuffer), infoBuffer)) {
+        return 0;
+    }
+
+    if ((unsigned char)infoBuffer[0] == isc_info_sql_stmt_type) {
+        short len = (short)isc_vax_integer(&infoBuffer[1], 2);
+        return (int)isc_vax_integer(&infoBuffer[3], len);
+    }
+    return 0;
+}
+
+int64_t QueryAffectedRowCountHandle(isc_stmt_handle stmtHandle) {
+    if (!stmtHandle) return 0;
+
+    char items[] = { isc_info_sql_records };
+    char infoBuffer[128];
+    memset(infoBuffer, 0, sizeof(infoBuffer));
+
+    ISC_STATUS_ARRAY status = {};
+    if (isc_dsql_sql_info(status, &stmtHandle, sizeof(items), items,
+                          sizeof(infoBuffer), infoBuffer)) {
+        return 0;
+    }
+
+    if ((unsigned char)infoBuffer[0] != isc_info_sql_records) {
+        return 0;
+    }
+
+    short blockLen = (short)isc_vax_integer(&infoBuffer[1], 2);
+    int pos = 3;
+    int end = pos + blockLen;
+    int64_t affectedRows = 0;
+
+    while (pos < end) {
+        unsigned char item = (unsigned char)infoBuffer[pos++];
+        if (item == isc_info_end) break;
+        if (pos + 2 > end) break;
+
+        short valueLen = (short)isc_vax_integer(&infoBuffer[pos], 2);
+        pos += 2;
+        if (valueLen < 0 || pos + valueLen > end) break;
+
+        int64_t value = isc_vax_integer(&infoBuffer[pos], valueLen);
+        pos += valueLen;
+
+        switch (item) {
+            case isc_info_req_insert_count:
+            case isc_info_req_update_count:
+            case isc_info_req_delete_count:
+                affectedRows += value;
+                break;
+            default:
+                break;
+        }
+    }
+
+    return affectedRows;
 }
 
 } // namespace
@@ -529,6 +922,7 @@ bool FBDatabase::connect(const std::string &database,
     mPassword = password;
     mRole = role;
     mServiceOutput.clear();
+    mAffectedRowCount = 0;
 
     // Build DPB
     char dpb[512];
@@ -590,6 +984,7 @@ void FBDatabase::disconnect() {
     isc_detach_database(mStatus, &mDB);
     mDB = 0;
     mConnected = false;
+    mAffectedRowCount = 0;
 }
 
 bool FBDatabase::beginTransaction() {
@@ -689,15 +1084,13 @@ bool FBDatabase::ensureTransaction() {
 bool FBDatabase::executeImmediate(const std::string &sql) {
     if (!mConnected) return false;
     clearError();
+    mAffectedRowCount = 0;
 
     if (!ensureTransaction()) return false;
 
-    if (isc_dsql_execute_immediate(mStatus, &mDB, &mTrans, 0, sql.c_str(),
-                                   mDialect, nullptr)) {
-        captureError();
-        return false;
-    }
-    return true;
+    FBStatement stmt;
+    if (!stmt.prepare(*this, sql)) return false;
+    return stmt.execute(*this, true);
 }
 
 bool FBDatabase::readBlob(ISC_QUAD blobId, std::string &out, bool isText) {
@@ -2172,26 +2565,15 @@ bool FBStatement::prepare(FBDatabase &db, const std::string &sql) {
 }
 
 int FBStatement::queryStatementType() {
-    char type_item[] = { isc_info_sql_stmt_type };
-    char info_buffer[20];
-    memset(info_buffer, 0, sizeof(info_buffer));
-
-    ISC_STATUS_ARRAY status;
-    if (isc_dsql_sql_info(status, &mStmt, sizeof(type_item), type_item,
-                          sizeof(info_buffer), info_buffer)) {
-        return 0;
-    }
-
-    if (info_buffer[0] == isc_info_sql_stmt_type) {
-        short len = (short)isc_vax_integer(&info_buffer[1], 2);
-        return (int)isc_vax_integer(&info_buffer[3], len);
-    }
-    return 0;
+    return QueryStatementTypeHandle(mStmt);
 }
 
-bool FBStatement::execute(FBDatabase &db) {
+bool FBStatement::execute(FBDatabase &db, bool trackAffectedRows) {
     if (!mPrepared) return false;
     db.clearError();
+    if (trackAffectedRows) {
+        db.mAffectedRowCount = 0;
+    }
 
     if (!db.ensureTransaction()) return false;
 
@@ -2212,6 +2594,9 @@ bool FBStatement::execute(FBDatabase &db) {
     }
 
     mExecuted = true;
+    if (trackAffectedRows) {
+        db.mAffectedRowCount = QueryAffectedRowCountHandle(mStmt);
+    }
     return true;
 }
 
@@ -2439,6 +2824,14 @@ FBValue FBStatement::columnValue(int index) const {
             }
             break;
         }
+#endif
+        case SQL_BLOB:
+            val.blobId = *(ISC_QUAD *)var->sqldata;
+            break;
+#ifdef SQL_BOOLEAN
+        case SQL_BOOLEAN:
+            val.intVal = *(unsigned char *)var->sqldata ? 1 : 0;
+            break;
 #endif
         default: {
             val.strVal.assign(var->sqldata, var->sqllen);

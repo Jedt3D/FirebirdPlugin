@@ -68,6 +68,7 @@ static RBInteger    fbClassPageSize(REALobject instance);
 static RBInteger    fbClassDatabaseSQLDialect(REALobject instance);
 static REALstring   fbClassODSVersion(REALobject instance);
 static RBBoolean    fbClassIsReadOnly(REALobject instance);
+static RBInt64      fbClassAffectedRowCount(REALobject instance);
 static RBBoolean    fbClassHasActiveTransaction(REALobject instance);
 static RBInt64      fbClassTransactionID(REALobject instance);
 static REALstring   fbClassTransactionIsolation(REALobject instance);
@@ -191,6 +192,7 @@ static REALproperty sFirebirdClassProperties[] = {
       FieldOffset(FirebirdClassData, role) },
     { "", "Dialect", "Integer", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, dialect) },
+    { "", "AffectedRowCount", "Int64", REALconsoleSafe, (REALproc)fbClassAffectedRowCount, nullptr, 0 },
 };
 
 static REALmethodDefinition sFirebirdClassMethods[] = {
@@ -759,7 +761,7 @@ static bool ExecuteInsertFromDatabaseRow(dbDatabase *dbData,
         BindInsertColumn(&stmt, fbd->db, i, columns[(size_t)i]);
     }
 
-    if (!stmt.execute(*fbd->db)) return false;
+    if (!stmt.execute(*fbd->db, true)) return false;
 
     if (outId && !ExtractReturnedIntegerID(stmt, fbd->db, *outId)) return false;
 
@@ -1019,7 +1021,7 @@ static void fbEngineExecuteSQL(dbDatabase *dbData, REALstring sql, REALarray par
     auto stmt = FBStatement();
     if (!stmt.prepare(*fbd->db, RealToStd(sql))) return;
     BindParams(&stmt, fbd->db, params);
-    bool ok = stmt.execute(*fbd->db);
+    bool ok = stmt.execute(*fbd->db, true);
 
     if (ok && fbd->autoCommit && fbd->db->hasActiveTransaction()) {
         fbd->db->commit();
@@ -1514,6 +1516,12 @@ static RBBoolean fbClassIsReadOnly(REALobject instance) {
     return value;
 }
 
+static RBInt64 fbClassAffectedRowCount(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return 0;
+    return (RBInt64)fbd->db->affectedRowCount();
+}
+
 static RBBoolean fbClassHasActiveTransaction(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
@@ -1812,7 +1820,7 @@ static REALdbCursor fbPrepStmtSelectSQL(REALobject instance) {
 static void fbPrepStmtExecuteSQL(REALobject instance) {
     ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
     if (!data->db || !data->stmt) return;
-    data->stmt->execute(*data->db);
+    data->stmt->execute(*data->db, true);
 }
 
 // ============================================================================

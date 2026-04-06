@@ -293,6 +293,7 @@ End
 		  TestRowSetIteration
 		  TestRowSetColumnAccess
 		  TestExecuteSQL
+		  TestAffectedRowCount
 		  TestTransaction
 		  TestTransactionRollback
 		  TestTransactionInfo
@@ -625,6 +626,84 @@ End
 		    End If
 		  Catch ex As DatabaseException
 		    LogFail "Valid query", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestAffectedRowCount()
+		  Log "-- Test: AffectedRowCount --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var directId As Integer = 0
+		  
+		  Try
+		    db.ExecuteSQL("DELETE FROM genres WHERE Name IN ('AffectedCountDirect', 'AffectedCountPrepared')")
+		    
+		    db.ExecuteSQL("INSERT INTO genres (Name) VALUES ('AffectedCountDirect')")
+		    If db.AffectedRowCount = 1 Then
+		      LogPass "AffectedRowCount INSERT"
+		    Else
+		      LogFail "AffectedRowCount INSERT", "Expected 1, got " + db.AffectedRowCount.ToString
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT GenreId FROM genres WHERE Name = 'AffectedCountDirect'")
+		    If rs <> Nil And Not rs.AfterLastRow Then
+		      directId = rs.Column("GenreId").IntegerValue
+		      rs.Close
+		      
+		      If db.AffectedRowCount = 1 Then
+		        LogPass "AffectedRowCount preserved after SelectSQL"
+		      Else
+		        LogFail "AffectedRowCount preserved after SelectSQL", "Expected 1, got " + db.AffectedRowCount.ToString
+		      End If
+		    Else
+		      If rs <> Nil Then rs.Close
+		      LogFail "AffectedRowCount setup", "Unable to locate inserted row"
+		    End If
+		    
+		    If directId > 0 Then
+		      db.ExecuteSQL("UPDATE genres SET Name = 'AffectedCountDirectUpdated' WHERE GenreId = " + directId.ToString)
+		      If db.AffectedRowCount = 1 Then
+		        LogPass "AffectedRowCount UPDATE"
+		      Else
+		        LogFail "AffectedRowCount UPDATE", "Expected 1, got " + db.AffectedRowCount.ToString
+		      End If
+		      
+		      db.ExecuteSQL("DELETE FROM genres WHERE GenreId = " + directId.ToString)
+		      If db.AffectedRowCount = 1 Then
+		        LogPass "AffectedRowCount DELETE"
+		      Else
+		        LogFail "AffectedRowCount DELETE", "Expected 1, got " + db.AffectedRowCount.ToString
+		      End If
+		    End If
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO genres (Name) VALUES (?)"))
+		    If ps <> Nil Then
+		      ps.Bind(0, "AffectedCountPrepared")
+		      ps.ExecuteSQL
+		      
+		      If db.AffectedRowCount = 1 Then
+		        LogPass "AffectedRowCount prepared ExecuteSQL"
+		      Else
+		        LogFail "AffectedRowCount prepared ExecuteSQL", "Expected 1, got " + db.AffectedRowCount.ToString
+		      End If
+		    Else
+		      LogFail "AffectedRowCount prepared ExecuteSQL", "Prepare returned Nil"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "AffectedRowCount", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "AffectedRowCount", ex.Message
+		  End Try
+		  
+		  Try
+		    db.ExecuteSQL("DELETE FROM genres WHERE Name IN ('AffectedCountDirect', 'AffectedCountDirectUpdated', 'AffectedCountPrepared')")
+		  Catch cleanupEx As RuntimeException
 		  End Try
 		  
 		  db.Close

@@ -63,7 +63,7 @@ public:
     FBStatement &operator=(const FBStatement &) = delete;
 
     bool prepare(FBDatabase &db, const std::string &sql);
-    bool execute(FBDatabase &db);
+    bool execute(FBDatabase &db, bool trackAffectedRows = false);
     bool fetch();                           // returns false when no more rows
     void close();
 
@@ -163,6 +163,7 @@ public:
     bool transactionIsolation(std::string &out);
     bool transactionAccessMode(std::string &out);
     bool transactionLockTimeout(long &out);
+    int64_t affectedRowCount() const { return mAffectedRowCount; }
 
     // Services API helpers
     bool backupDatabase(const std::string &backupFile);
@@ -231,6 +232,7 @@ private:
     std::string     mServiceOutput;
     long            mErrorCode = 0;
     std::string     mErrorMsg;
+    int64_t         mAffectedRowCount = 0;
 
     friend class FBStatement;
 };
