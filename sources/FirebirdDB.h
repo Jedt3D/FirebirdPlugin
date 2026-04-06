@@ -128,7 +128,9 @@ public:
                  int dialect = 3,
                  const std::string &host = "",
                  int port = 3050,
-                 const std::string &databasePath = "");
+                 const std::string &databasePath = "",
+                 const std::string &wireCrypt = "",
+                 const std::string &authClientPlugins = "");
     void disconnect();
     bool isConnected() const { return mConnected; }
 
@@ -189,7 +191,9 @@ public:
                                  const std::string &password,
                                  const std::string &role,
                                  const std::string &host,
-                                 int port);
+                                 int port,
+                                 const std::string &wireCrypt,
+                                 const std::string &authClientPlugins);
     void copyServiceStateFrom(const FBDatabase &other);
 
     // Error state
@@ -229,6 +233,8 @@ private:
     std::string     mUser;
     std::string     mPassword;
     std::string     mRole;
+    std::string     mWireCrypt;
+    std::string     mAuthClientPlugins;
     std::string     mServiceOutput;
     long            mErrorCode = 0;
     std::string     mErrorMsg;

@@ -638,6 +638,50 @@ std::string NormalizeTextToken(const std::string &text) {
     return normalized;
 }
 
+std::string TrimText(const std::string &text) {
+    size_t start = 0;
+    while (start < text.size() && std::isspace((unsigned char)text[start])) {
+        start += 1;
+    }
+
+    size_t end = text.size();
+    while (end > start && std::isspace((unsigned char)text[end - 1])) {
+        end -= 1;
+    }
+
+    return text.substr(start, end - start);
+}
+
+bool NormalizeWireCryptOption(const std::string &text, std::string &out) {
+    const std::string normalized = NormalizeTextToken(text);
+    if (normalized.empty()) {
+        out.clear();
+        return true;
+    }
+
+    if (normalized == "disabled") {
+        out = "Disabled";
+        return true;
+    }
+
+    if (normalized == "enabled") {
+        out = "Enabled";
+        return true;
+    }
+
+    if (normalized == "required") {
+        out = "Required";
+        return true;
+    }
+
+    return false;
+}
+
+std::string BuildWireCryptConfig(const std::string &wireCrypt) {
+    if (wireCrypt.empty()) return "";
+    return "WireCrypt = " + wireCrypt;
+}
+
 struct TransactionOptionMapping {
     std::string normalizedIsolation;
     std::vector<unsigned char> isolationItems;
@@ -909,10 +953,31 @@ bool FBDatabase::connect(const std::string &database,
                          int dialect,
                          const std::string &host,
                          int port,
-                         const std::string &databasePath)
+                         const std::string &databasePath,
+                         const std::string &wireCrypt,
+                         const std::string &authClientPlugins)
 {
     if (mConnected) disconnect();
     clearError();
+
+    std::string normalizedWireCrypt;
+    if (!NormalizeWireCryptOption(wireCrypt, normalizedWireCrypt)) {
+        setError(-200150, "WireCrypt must be Disabled, Enabled, or Required");
+        return false;
+    }
+
+    const std::string trimmedAuthClientPlugins = TrimText(authClientPlugins);
+    if (trimmedAuthClientPlugins.size() > 255) {
+        setError(-200151, "AuthClientPlugins exceeds Firebird DPB length limit");
+        return false;
+    }
+
+    const std::string wireCryptConfig = BuildWireCryptConfig(normalizedWireCrypt);
+    if (wireCryptConfig.size() > 255) {
+        setError(-200152, "WireCrypt configuration exceeds Firebird DPB length limit");
+        return false;
+    }
+
     mDialect = dialect;
     mCharset = charset.empty() ? "UTF8" : charset;
     mHost = host;
@@ -921,50 +986,47 @@ bool FBDatabase::connect(const std::string &database,
     mUser = user;
     mPassword = password;
     mRole = role;
+    mWireCrypt = normalizedWireCrypt;
+    mAuthClientPlugins = trimmedAuthClientPlugins;
     mServiceOutput.clear();
     mAffectedRowCount = 0;
 
     // Build DPB
-    char dpb[512];
-    short dpb_len = 0;
-
-    dpb[dpb_len++] = isc_dpb_version1;
+    std::vector<char> dpb;
+    dpb.reserve(512);
+    dpb.push_back((char)isc_dpb_version1);
 
     if (!user.empty()) {
-        dpb[dpb_len++] = isc_dpb_user_name;
-        dpb[dpb_len++] = (char)user.size();
-        memcpy(&dpb[dpb_len], user.c_str(), user.size());
-        dpb_len += user.size();
+        AppendAttachStringClumplet(dpb, isc_dpb_user_name, user);
     }
 
     if (!password.empty()) {
-        dpb[dpb_len++] = isc_dpb_password;
-        dpb[dpb_len++] = (char)password.size();
-        memcpy(&dpb[dpb_len], password.c_str(), password.size());
-        dpb_len += password.size();
+        AppendAttachStringClumplet(dpb, isc_dpb_password, password);
     }
 
     if (!charset.empty()) {
-        dpb[dpb_len++] = isc_dpb_lc_ctype;
-        dpb[dpb_len++] = (char)charset.size();
-        memcpy(&dpb[dpb_len], charset.c_str(), charset.size());
-        dpb_len += charset.size();
+        AppendAttachStringClumplet(dpb, isc_dpb_lc_ctype, charset);
     }
 
     if (!role.empty()) {
-        dpb[dpb_len++] = isc_dpb_sql_role_name;
-        dpb[dpb_len++] = (char)role.size();
-        memcpy(&dpb[dpb_len], role.c_str(), role.size());
-        dpb_len += role.size();
+        AppendAttachStringClumplet(dpb, isc_dpb_sql_role_name, role);
+    }
+
+    if (!trimmedAuthClientPlugins.empty()) {
+        AppendAttachStringClumplet(dpb, isc_dpb_auth_plugin_list, trimmedAuthClientPlugins);
+    }
+
+    if (!wireCryptConfig.empty()) {
+        AppendAttachStringClumplet(dpb, isc_dpb_config, wireCryptConfig);
     }
 
     // SQL dialect
-    dpb[dpb_len++] = isc_dpb_sql_dialect;
-    dpb[dpb_len++] = 1;
-    dpb[dpb_len++] = (char)dialect;
+    dpb.push_back((char)isc_dpb_sql_dialect);
+    dpb.push_back(1);
+    dpb.push_back((char)dialect);
 
     mDB = 0;
-    if (isc_attach_database(mStatus, 0, database.c_str(), &mDB, dpb_len, dpb)) {
+    if (isc_attach_database(mStatus, 0, database.c_str(), &mDB, (short)dpb.size(), dpb.data())) {
         captureError();
         return false;
     }
@@ -1193,12 +1255,28 @@ bool FBDatabase::runServiceRequest(const std::vector<char> &request, std::string
     clearError();
     output.clear();
 
+    std::string normalizedWireCrypt;
+    if (!NormalizeWireCryptOption(mWireCrypt, normalizedWireCrypt)) {
+        setError(-200150, "WireCrypt must be Disabled, Enabled, or Required");
+        return false;
+    }
+
+    const std::string trimmedAuthClientPlugins = TrimText(mAuthClientPlugins);
+
     isc_svc_handle service = 0;
     std::vector<char> attachSpb;
     attachSpb.push_back((char)isc_spb_version1);
     AppendAttachStringClumplet(attachSpb, isc_spb_user_name, mUser);
     if (!mPassword.empty()) {
         AppendAttachStringClumplet(attachSpb, isc_spb_password, mPassword);
+    }
+    if (!trimmedAuthClientPlugins.empty()) {
+        AppendServiceStringClumplet(attachSpb, isc_spb_auth_plugin_list, trimmedAuthClientPlugins);
+    }
+
+    const std::string wireCryptConfig = BuildWireCryptConfig(normalizedWireCrypt);
+    if (!wireCryptConfig.empty()) {
+        AppendServiceStringClumplet(attachSpb, isc_spb_config, wireCryptConfig);
     }
 
     const std::string serviceName = BuildServiceManagerName(mHost, mPort);
@@ -2318,13 +2396,17 @@ void FBDatabase::configureServiceContext(const std::string &databasePath,
                                          const std::string &password,
                                          const std::string &role,
                                          const std::string &host,
-                                         int port) {
+                                         int port,
+                                         const std::string &wireCrypt,
+                                         const std::string &authClientPlugins) {
     mHost = host;
     mPort = port > 0 ? port : 3050;
     mDatabasePath = databasePath;
     mUser = user.empty() ? "SYSDBA" : user;
     mPassword = password;
     mRole = role;
+    mWireCrypt = wireCrypt;
+    mAuthClientPlugins = authClientPlugins;
     mServiceOutput.clear();
     clearError();
 }

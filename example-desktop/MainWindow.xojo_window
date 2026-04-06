@@ -294,6 +294,7 @@ End
 		  TestRowSetColumnAccess
 		  TestExecuteSQL
 		  TestAffectedRowCount
+		  TestConnectionSecurityOptions
 		  TestTransaction
 		  TestTransactionRollback
 		  TestTransactionInfo
@@ -629,6 +630,88 @@ End
 		  End Try
 		  
 		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestConnectionSecurityOptions()
+		  Log "-- Test: Connection security options --"
+
+		  Var secureDb As New FirebirdDatabase
+		  secureDb.Host = "localhost"
+		  secureDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  secureDb.UserName = "SYSDBA"
+		  secureDb.Password = "masterkey"
+		  secureDb.CharacterSet = "UTF8"
+		  secureDb.WireCrypt = "Required"
+		  secureDb.AuthClientPlugins = "Srp256,Srp"
+
+		  Try
+		    If secureDb.Connect Then
+		      LogPass "WireCrypt/AuthClientPlugins connect"
+
+		      Var rs As RowSet = secureDb.SelectSQL("SELECT RDB$GET_CONTEXT('SYSTEM', 'WIRE_ENCRYPTED') AS WIRE_ENCRYPTED FROM RDB$DATABASE")
+		      If rs <> Nil And Not rs.AfterLastRow Then
+		        Var wireEncrypted As String = rs.Column("WIRE_ENCRYPTED").StringValue.Trim.Uppercase
+		        rs.Close
+
+		        If wireEncrypted = "TRUE" Or wireEncrypted = "1" Or wireEncrypted = "YES" Then
+		          LogPass "WireCrypt readback"
+		        Else
+		          LogFail "WireCrypt readback", "Expected encrypted wire connection, got: " + wireEncrypted
+		        End If
+		      Else
+		        If rs <> Nil Then rs.Close
+		        LogFail "WireCrypt readback", "Unable to read SYSTEM context"
+		      End If
+		    Else
+		      LogFail "WireCrypt/AuthClientPlugins connect", secureDb.ErrorMessage
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "WireCrypt/AuthClientPlugins connect", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "WireCrypt/AuthClientPlugins connect", ex.Message
+		  End Try
+
+		  secureDb.Close
+
+		  Var invalidWireDb As New FirebirdDatabase
+		  invalidWireDb.Host = "localhost"
+		  invalidWireDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  invalidWireDb.UserName = "SYSDBA"
+		  invalidWireDb.Password = "masterkey"
+		  invalidWireDb.CharacterSet = "UTF8"
+		  invalidWireDb.WireCrypt = "Bogus"
+
+		  Try
+		    If invalidWireDb.Connect Then
+		      LogFail "Invalid WireCrypt rejected", "Connection should have failed"
+		      invalidWireDb.Close
+		    Else
+		      LogPass "Invalid WireCrypt rejected"
+		    End If
+		  Catch ex As DatabaseException
+		    LogPass "Invalid WireCrypt rejected"
+		  End Try
+
+		  Var invalidAuthDb As New FirebirdDatabase
+		  invalidAuthDb.Host = "localhost"
+		  invalidAuthDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  invalidAuthDb.UserName = "SYSDBA"
+		  invalidAuthDb.Password = "masterkey"
+		  invalidAuthDb.CharacterSet = "UTF8"
+		  invalidAuthDb.AuthClientPlugins = "__INVALID_PLUGIN__"
+
+		  Try
+		    If invalidAuthDb.Connect Then
+		      LogFail "Invalid AuthClientPlugins rejected", "Connection should have failed"
+		      invalidAuthDb.Close
+		    Else
+		      LogPass "Invalid AuthClientPlugins rejected"
+		    End If
+		  Catch ex As DatabaseException
+		    LogPass "Invalid AuthClientPlugins rejected"
+		  End Try
 		End Sub
 	#tag EndMethod
 

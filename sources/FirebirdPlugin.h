@@ -52,6 +52,8 @@ struct FirebirdClassData {
     REALstring password;
     REALstring characterSet;
     REALstring role;
+    REALstring wireCrypt;
+    REALstring authClientPlugins;
     int32_t    port;
     int32_t    dialect;
 };

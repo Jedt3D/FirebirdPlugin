@@ -190,6 +190,10 @@ static REALproperty sFirebirdClassProperties[] = {
       FieldOffset(FirebirdClassData, characterSet) },
     { "", "Role", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, role) },
+    { "", "WireCrypt", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
+      FieldOffset(FirebirdClassData, wireCrypt) },
+    { "", "AuthClientPlugins", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
+      FieldOffset(FirebirdClassData, authClientPlugins) },
     { "", "Dialect", "Integer", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, dialect) },
     { "", "AffectedRowCount", "Int64", REALconsoleSafe, (REALproc)fbClassAffectedRowCount, nullptr, 0 },
@@ -1411,6 +1415,8 @@ static void fbClassConstructor(REALobject instance) {
     data->password = nullptr;
     data->characterSet = nullptr;
     data->role = nullptr;
+    data->wireCrypt = nullptr;
+    data->authClientPlugins = nullptr;
     data->port = 3050;
     data->dialect = 3;
 }
@@ -1423,6 +1429,8 @@ static void fbClassDestructor(REALobject instance) {
     if (data->password) REALUnlockString(data->password);
     if (data->characterSet) REALUnlockString(data->characterSet);
     if (data->role) REALUnlockString(data->role);
+    if (data->wireCrypt) REALUnlockString(data->wireCrypt);
+    if (data->authClientPlugins) REALUnlockString(data->authClientPlugins);
 }
 
 static RBBoolean fbClassConnect(REALobject instance) {
@@ -1434,6 +1442,8 @@ static RBBoolean fbClassConnect(REALobject instance) {
     std::string pass = RealToStd(data->password);
     std::string charset = RealToStd(data->characterSet);
     std::string role = RealToStd(data->role);
+    std::string wireCrypt = RealToStd(data->wireCrypt);
+    std::string authClientPlugins = RealToStd(data->authClientPlugins);
 
     if (charset.empty()) charset = "UTF8";
     if (user.empty()) user = "SYSDBA";
@@ -1452,7 +1462,7 @@ static RBBoolean fbClassConnect(REALobject instance) {
 
     auto *fb = new FBDatabase();
     if (!fb->connect(connStr, user, pass, charset, role, data->dialect,
-                     host, data->port, dbName)) {
+                     host, data->port, dbName, wireCrypt, authClientPlugins)) {
         delete fb;
         return false;
     }
@@ -1642,7 +1652,9 @@ static RBBoolean fbClassShutdownDenyNewAttachments(REALobject instance, long tim
                                       RealToStd(data->password),
                                       RealToStd(data->role),
                                       RealToStd(data->host),
-                                      data->port);
+                                      data->port,
+                                      RealToStd(data->wireCrypt),
+                                      RealToStd(data->authClientPlugins));
 
     RBBoolean ok = controlDb.shutdownDenyNewAttachments(timeoutSeconds);
     fbd->db->copyServiceStateFrom(controlDb);
@@ -1660,7 +1672,9 @@ static RBBoolean fbClassBringDatabaseOnline(REALobject instance) {
                                       RealToStd(data->password),
                                       RealToStd(data->role),
                                       RealToStd(data->host),
-                                      data->port);
+                                      data->port,
+                                      RealToStd(data->wireCrypt),
+                                      RealToStd(data->authClientPlugins));
 
     RBBoolean ok = controlDb.bringDatabaseOnline();
     fbd->db->copyServiceStateFrom(controlDb);
