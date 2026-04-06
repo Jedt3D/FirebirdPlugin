@@ -76,7 +76,7 @@ plugin: $(DYLIB)
 	rm -rf "$(PLUGIN_STAGING)" "$(OUTPUT_DIR)/$(PLUGIN_NAME).xojo_plugin"
 	mkdir -p "$(PLUGIN_STAGING)/$(PLUGIN_NAME)/Build Resources/Mac arm64"
 	cp $(DYLIB) "$(PLUGIN_STAGING)/$(PLUGIN_NAME)/Build Resources/Mac arm64/$(PLUGIN_NAME).dylib"
-	touch "$(PLUGIN_STAGING)/Version.info"
+	printf '%s\n' "$(PLUGIN_NAME) build $$(date '+%Y-%m-%d %H:%M:%S %z')" > "$(PLUGIN_STAGING)/Version.info"
 	cd "$(PLUGIN_STAGING)" && zip -r "../$(PLUGIN_NAME).xojo_plugin" . -x ".*"
 	rm -rf "$(PLUGIN_STAGING)"
 	@echo "Plugin packaged: $(OUTPUT_DIR)/$(PLUGIN_NAME).xojo_plugin"

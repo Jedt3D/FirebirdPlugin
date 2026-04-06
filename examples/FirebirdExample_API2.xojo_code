@@ -435,6 +435,29 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
       System.DebugLog("Sweep interval update error: " + db.ErrorMessage)
     End If
 
+    Var controlDb As New FirebirdDatabase
+    controlDb.Host = db.Host
+    controlDb.Port = db.Port
+    controlDb.DatabaseName = db.DatabaseName
+    controlDb.UserName = db.UserName
+    controlDb.Password = db.Password
+    controlDb.CharacterSet = db.CharacterSet
+    controlDb.Role = db.Role
+
+    If controlDb.ShutdownDenyNewAttachments(1) Then
+      System.DebugLog("Shutdown deny-new-attachments complete")
+      System.DebugLog(controlDb.LastServiceOutput)
+    Else
+      System.DebugLog("Shutdown deny-new-attachments error: " + controlDb.ErrorMessage)
+    End If
+
+    If controlDb.BringDatabaseOnline Then
+      System.DebugLog("Bring database online complete")
+      System.DebugLog(controlDb.LastServiceOutput)
+    Else
+      System.DebugLog("Bring database online error: " + controlDb.ErrorMessage)
+    End If
+
     If db.DisplayUsers Then
       System.DebugLog("User display complete")
       System.DebugLog(db.LastServiceOutput)

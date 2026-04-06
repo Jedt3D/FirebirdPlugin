@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `ListLimboTransactions`, `CommitLimboTransaction`, `RollbackLimboTransaction`, `SetSweepInterval`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `ListLimboTransactions`, `CommitLimboTransaction`, `RollbackLimboTransaction`, `SetSweepInterval`, `ShutdownDenyNewAttachments`, `BringDatabaseOnline`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -156,9 +156,9 @@ Lock-timeout semantics:
 - `0` = `NO WAIT`
 - `> 0` = wait for that many seconds
 
-## Services API: Backup, Restore, Statistics, Validation, Sweep Properties, and User Management
+## Services API: Backup, Restore, Validation, Availability Control, Sweep Properties, and User Management
 
-Phases 06-15 add a narrow operational surface over the Firebird service manager:
+Phases 06-17 add a narrow operational surface over the Firebird service manager:
 
 - `BackupDatabase(backupFile As String) As Boolean`
 - `RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean`
@@ -169,6 +169,8 @@ Phases 06-15 add a narrow operational surface over the Firebird service manager:
 - `CommitLimboTransaction(transactionId As Int64) As Boolean`
 - `RollbackLimboTransaction(transactionId As Int64) As Boolean`
 - `SetSweepInterval(interval As Integer) As Boolean`
+- `ShutdownDenyNewAttachments(timeoutSeconds As Integer) As Boolean`
+- `BringDatabaseOnline() As Boolean`
 - `DisplayUsers() As Boolean`
 - `AddUser(userName As String, password As String) As Boolean`
 - `ChangeUserPassword(userName As String, password As String) As Boolean`
@@ -226,6 +228,25 @@ If db.SetSweepInterval(20000) Then
   System.DebugLog(db.LastServiceOutput)
 End If
 
+Var controlDb As New FirebirdDatabase
+controlDb.Host = db.Host
+controlDb.Port = db.Port
+controlDb.DatabaseName = db.DatabaseName
+controlDb.UserName = db.UserName
+controlDb.Password = db.Password
+controlDb.CharacterSet = db.CharacterSet
+controlDb.Role = db.Role
+
+If controlDb.ShutdownDenyNewAttachments(1) Then
+  System.DebugLog("Database shutdown deny-new-attachments enabled")
+  System.DebugLog(controlDb.LastServiceOutput)
+End If
+
+If controlDb.BringDatabaseOnline Then
+  System.DebugLog("Database brought online")
+  System.DebugLog(controlDb.LastServiceOutput)
+End If
+
 If db.DisplayUsers Then
   System.DebugLog("User display complete")
   System.DebugLog(db.LastServiceOutput)
@@ -267,11 +288,13 @@ Notes:
 - `ListLimboTransactions()` runs Firebird's service-manager limbo-transaction listing action for the currently connected database
 - `CommitLimboTransaction()` and `RollbackLimboTransaction()` run Firebird's limbo-recovery actions for an explicit transaction id
 - `SetSweepInterval()` runs Firebird's database-properties service action for the currently connected database
+- `ShutdownDenyNewAttachments()` and `BringDatabaseOnline()` run Firebird's database-availability service actions and are safest through a separate service-control `FirebirdDatabase` object that is not being used for SQL statements
 - `DisplayUsers()` runs Firebird's read-only user display service action
 - `AddUser()`, `ChangeUserPassword()`, `SetUserAdmin()`, `UpdateUserNames()`, and `DeleteUser()` run Firebird's security service actions for user mutation
-- `LastServiceOutput()` returns the verbose service output from the last backup, restore, statistics, validation, user-display, or user-mutation operation
-- some service actions, including sweep, limbo listing on a clean database, and sweep-interval updates, may succeed without emitting verbose output
+- `LastServiceOutput()` returns the verbose service output from the last service-manager operation, including shutdown/online transitions
+- some service actions, including sweep, limbo listing on a clean database, sweep-interval updates, and shutdown/online transitions, may succeed without emitting verbose output
 - limbo recovery on a non-limbo transaction id may be accepted by the engine as a no-op instead of returning an explicit error
+- for shutdown testing, close ordinary SQL sessions before probing denied new attachments
 - authoritative verification for admin/name mutation is best done through login behavior or `SEC$USERS`, not by scraping formatted `DisplayUsers()` text
 
 ## PreparedStatement Type Binds

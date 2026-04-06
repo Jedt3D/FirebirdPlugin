@@ -318,6 +318,7 @@ End
 		  TestListLimboTransactions
 		  TestRecoverLimboTransactions
 		  TestSetSweepInterval
+		  TestShutdownOnlineControl
 		  TestDisplayUsers
 		  TestAddDeleteUser
 		  TestChangeUserPassword
@@ -1893,6 +1894,117 @@ End
 		  
 		  Call db.SetSweepInterval(originalInterval)
 		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestShutdownOnlineControl()
+		  Log "-- Test: Services shutdown / online control --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Var controlDb As New FirebirdDatabase
+		  controlDb.Host = "localhost"
+		  controlDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  controlDb.UserName = "SYSDBA"
+		  controlDb.Password = "masterkey"
+		  controlDb.CharacterSet = "UTF8"
+		  
+		  Var testUser As String = "XOJO_PHASE17_USER"
+		  Var testPassword As String = "phase17_user"
+		  Var addedUser As Boolean = False
+		  Var shutdownApplied As Boolean = False
+		  
+		  Try
+		    Call controlDb.BringDatabaseOnline
+		    Call db.DeleteUser(testUser)
+		    
+		    If db.AddUser(testUser, testPassword) Then
+		      LogPass "ShutdownOnline setup"
+		      addedUser = True
+		    Else
+		      LogFail "ShutdownOnline setup", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var baselineDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, testPassword)
+		    If baselineDb <> Nil Then
+		      LogPass "ShutdownOnline baseline connect"
+		      baselineDb.Close
+		    Else
+		      LogFail "ShutdownOnline baseline connect", "Expected ordinary user login before shutdown"
+		      db.Close
+		      Return
+		    End If
+		    
+		    db.Close
+		    
+		    If controlDb.ShutdownDenyNewAttachments(1) Then
+		      LogPass "ShutdownDenyNewAttachments"
+		      shutdownApplied = True
+		    Else
+		      LogFail "ShutdownDenyNewAttachments", controlDb.ErrorMessage
+		      Return
+		    End If
+		    
+		    If controlDb.LastServiceOutput.Trim <> "" Then
+		      LogPass "ShutdownDenyNewAttachments service output"
+		    Else
+		      LogPass "ShutdownDenyNewAttachments service output: shutdown produced no verbose output"
+		    End If
+		    
+		    Var deniedDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, testPassword)
+		    If deniedDb = Nil Then
+		      LogPass "ShutdownDenyNewAttachments readback"
+		    Else
+		      LogFail "ShutdownDenyNewAttachments readback", "Expected ordinary user attachment to be denied during shutdown"
+		      deniedDb.Close
+		    End If
+		    
+		    If controlDb.BringDatabaseOnline Then
+		      LogPass "BringDatabaseOnline"
+		      shutdownApplied = False
+		    Else
+		      LogFail "BringDatabaseOnline", controlDb.ErrorMessage
+		      Return
+		    End If
+		    
+		    If controlDb.LastServiceOutput.Trim <> "" Then
+		      LogPass "BringDatabaseOnline service output"
+		    Else
+		      LogPass "BringDatabaseOnline service output: online transition produced no verbose output"
+		    End If
+		    
+		    Var onlineDb As FirebirdDatabase = OpenTestDBWithCredentials(testUser, testPassword)
+		    If onlineDb <> Nil Then
+		      LogPass "BringDatabaseOnline readback"
+		      onlineDb.Close
+		    Else
+		      LogFail "BringDatabaseOnline readback", "Expected ordinary user attachment after database was brought online"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services shutdown / online control", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services shutdown / online control", ex.Message
+		  End Try
+		  
+		  If shutdownApplied Then
+		    Call controlDb.BringDatabaseOnline
+		  End If
+		  
+		  Var cleanupDb As FirebirdDatabase = OpenTestDB
+		  If cleanupDb <> Nil And addedUser Then
+		    Call cleanupDb.DeleteUser(testUser)
+		    cleanupDb.Close
+		  ElseIf db <> Nil And addedUser Then
+		    Call db.DeleteUser(testUser)
+		  End If
+		  
+		  If db <> Nil Then
+		    db.Close
+		  End If
 		End Sub
 	#tag EndMethod
 

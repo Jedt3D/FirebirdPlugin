@@ -174,6 +174,8 @@ public:
     bool commitLimboTransaction(int64_t transactionId);
     bool rollbackLimboTransaction(int64_t transactionId);
     bool setSweepInterval(long interval);
+    bool shutdownDenyNewAttachments(long timeoutSeconds);
+    bool bringDatabaseOnline();
     bool displayUsers();
     bool addUser(const std::string &userName, const std::string &password);
     bool changeUserPassword(const std::string &userName, const std::string &password);
@@ -181,6 +183,13 @@ public:
     bool updateUserNames(const std::string &userName, const std::string &firstName, const std::string &middleName, const std::string &lastName);
     bool deleteUser(const std::string &userName);
     const std::string &lastServiceOutput() const { return mServiceOutput; }
+    void configureServiceContext(const std::string &databasePath,
+                                 const std::string &user,
+                                 const std::string &password,
+                                 const std::string &role,
+                                 const std::string &host,
+                                 int port);
+    void copyServiceStateFrom(const FBDatabase &other);
 
     // Error state
     long lastErrorCode() const { return mErrorCode; }

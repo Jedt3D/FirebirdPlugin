@@ -148,6 +148,18 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var rollbackLimboLog As String = db.LastServiceOutput
   Var setSweepIntervalOk As Boolean = db.SetSweepInterval(20000)
   Var setSweepIntervalLog As String = db.LastServiceOutput
+  Var serviceControlDb As New FirebirdDatabase
+  serviceControlDb.Host = db.Host
+  serviceControlDb.Port = db.Port
+  serviceControlDb.DatabaseName = db.DatabaseName
+  serviceControlDb.UserName = db.UserName
+  serviceControlDb.Password = db.Password
+  serviceControlDb.CharacterSet = db.CharacterSet
+  serviceControlDb.Role = db.Role
+  Var shutdownOk As Boolean = serviceControlDb.ShutdownDenyNewAttachments(1)
+  Var shutdownLog As String = serviceControlDb.LastServiceOutput
+  Var onlineOk As Boolean = serviceControlDb.BringDatabaseOnline
+  Var onlineLog As String = serviceControlDb.LastServiceOutput
   Var usersOk As Boolean = db.DisplayUsers
   Var usersLog As String = db.LastServiceOutput
   Var addUserOk As Boolean = db.AddUser("QUICKREF_USER", "quickref_secret")

@@ -69,6 +69,8 @@ static RBBoolean    fbClassListLimboTransactions(REALobject instance);
 static RBBoolean    fbClassCommitLimboTransaction(REALobject instance, RBInt64 transactionId);
 static RBBoolean    fbClassRollbackLimboTransaction(REALobject instance, RBInt64 transactionId);
 static RBBoolean    fbClassSetSweepInterval(REALobject instance, long interval);
+static RBBoolean    fbClassShutdownDenyNewAttachments(REALobject instance, long timeoutSeconds);
+static RBBoolean    fbClassBringDatabaseOnline(REALobject instance);
 static RBBoolean    fbClassDisplayUsers(REALobject instance);
 static RBBoolean    fbClassAddUser(REALobject instance, REALstring userName, REALstring password);
 static RBBoolean    fbClassChangeUserPassword(REALobject instance, REALstring userName, REALstring password);
@@ -199,6 +201,8 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassCommitLimboTransaction, REALnoImplementation, "CommitLimboTransaction(transactionId As Int64) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassRollbackLimboTransaction, REALnoImplementation, "RollbackLimboTransaction(transactionId As Int64) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassSetSweepInterval, REALnoImplementation, "SetSweepInterval(interval As Integer) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassShutdownDenyNewAttachments, REALnoImplementation, "ShutdownDenyNewAttachments(timeoutSeconds As Integer) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassBringDatabaseOnline, REALnoImplementation, "BringDatabaseOnline() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassDisplayUsers, REALnoImplementation, "DisplayUsers() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassAddUser, REALnoImplementation, "AddUser(userName As String, password As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassChangeUserPassword, REALnoImplementation, "ChangeUserPassword(userName As String, password As String) As Boolean", REALconsoleSafe },
@@ -307,6 +311,23 @@ static FirebirdDbData *GetFirebirdDbData(REALobject instance) {
     if (!instance) return nullptr;
     REALdbDatabase realDb = (REALdbDatabase)instance;
     return (FirebirdDbData *)REALGetDBFromREALdbDatabase(realDb);
+}
+
+static FirebirdDbData *EnsureFirebirdDbData(REALobject instance) {
+    if (!instance) return nullptr;
+
+    FirebirdDbData *fbd = GetFirebirdDbData(instance);
+    if (fbd) return fbd;
+
+    auto *fb = new FBDatabase();
+    auto *newData = new FirebirdDbData;
+    newData->db = fb;
+    newData->autoCommit = true;
+
+    REALdbDatabase realDb = (REALdbDatabase)instance;
+    REALConstructDBDatabase(realDb, (dbDatabase *)newData, &sFirebirdEngine);
+    REALSetDBIsConnected(realDb, false);
+    return newData;
 }
 
 struct InsertColumnBinding {
@@ -1586,6 +1607,42 @@ static RBBoolean fbClassSetSweepInterval(REALobject instance, long interval) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->setSweepInterval(interval);
+}
+
+static RBBoolean fbClassShutdownDenyNewAttachments(REALobject instance, long timeoutSeconds) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+
+    FBDatabase controlDb;
+    controlDb.configureServiceContext(RealToStd(data->databaseName),
+                                      RealToStd(data->userName),
+                                      RealToStd(data->password),
+                                      RealToStd(data->role),
+                                      RealToStd(data->host),
+                                      data->port);
+
+    RBBoolean ok = controlDb.shutdownDenyNewAttachments(timeoutSeconds);
+    fbd->db->copyServiceStateFrom(controlDb);
+    return ok;
+}
+
+static RBBoolean fbClassBringDatabaseOnline(REALobject instance) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+
+    FBDatabase controlDb;
+    controlDb.configureServiceContext(RealToStd(data->databaseName),
+                                      RealToStd(data->userName),
+                                      RealToStd(data->password),
+                                      RealToStd(data->role),
+                                      RealToStd(data->host),
+                                      data->port);
+
+    RBBoolean ok = controlDb.bringDatabaseOnline();
+    fbd->db->copyServiceStateFrom(controlDb);
+    return ok;
 }
 
 static RBBoolean fbClassDisplayUsers(REALobject instance) {

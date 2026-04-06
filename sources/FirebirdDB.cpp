@@ -874,10 +874,6 @@ bool FBDatabase::transactionInfo(const unsigned char *items, short itemLen, std:
 }
 
 bool FBDatabase::runServiceRequest(const std::vector<char> &request, std::string &output) {
-    if (!mConnected) {
-        setError(-200101, "Database is not connected");
-        return false;
-    }
     if (mUser.empty()) {
         setError(-200102, "Service manager requires a user name");
         return false;
@@ -893,11 +889,6 @@ bool FBDatabase::runServiceRequest(const std::vector<char> &request, std::string
     if (!mPassword.empty()) {
         AppendAttachStringClumplet(attachSpb, isc_spb_password, mPassword);
     }
-#ifdef isc_spb_expected_db
-    if (!mDatabasePath.empty()) {
-        AppendAttachStringClumplet(attachSpb, isc_spb_expected_db, mDatabasePath);
-    }
-#endif
 
     const std::string serviceName = BuildServiceManagerName(mHost, mPort);
     if (isc_service_attach(mStatus, 0, serviceName.c_str(), &service,
@@ -1604,6 +1595,111 @@ bool FBDatabase::setSweepInterval(long interval) {
     return true;
 }
 
+bool FBDatabase::shutdownDenyNewAttachments(long timeoutSeconds) {
+    if (mDatabasePath.empty()) {
+        setError(-200171, "Database path is unavailable for shutdown");
+        return false;
+    }
+    if (timeoutSeconds < 0) {
+        setError(-200172, "Shutdown timeout must be zero or greater");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200173, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200174, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    const unsigned char shutdownMode = isc_spb_prp_sm_multi;
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_properties);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertBytes(builder, status.get(), isc_spb_prp_shutdown_mode, &shutdownMode, 1);
+    IXpbBuilder_insertInt(builder, status.get(), isc_spb_prp_attachments_shutdown, timeoutSeconds);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200175, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
+bool FBDatabase::bringDatabaseOnline() {
+    if (mDatabasePath.empty()) {
+        setError(-200176, "Database path is unavailable for online transition");
+        return false;
+    }
+
+    auto &utilities = GetFirebirdUtilities();
+    FirebirdStatusScope status;
+    if (!status.get() || !utilities.util) {
+        setError(-200177, "Firebird utility interface is unavailable");
+        return false;
+    }
+
+    IXpbBuilder *builder = IUtil_getXpbBuilder(utilities.util, status.get(), IXpbBuilder_SPB_START, nullptr, 0);
+    if (!builder || !status.ok()) {
+        setError(-200178, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    const unsigned char onlineMode = isc_spb_prp_sm_normal;
+
+    IXpbBuilder_insertTag(builder, status.get(), isc_action_svc_properties);
+    IXpbBuilder_insertString(builder, status.get(), isc_spb_dbname, mDatabasePath.c_str());
+    if (!mRole.empty()) {
+        IXpbBuilder_insertString(builder, status.get(), isc_spb_sql_role_name, mRole.c_str());
+    }
+    IXpbBuilder_insertBytes(builder, status.get(), isc_spb_prp_online_mode, &onlineMode, 1);
+
+    std::vector<char> request;
+    if (status.ok()) {
+        unsigned length = IXpbBuilder_getBufferLength(builder, status.get());
+        const unsigned char *buffer = IXpbBuilder_getBuffer(builder, status.get());
+        if (status.ok() && buffer && length > 0) {
+            request.assign(reinterpret_cast<const char *>(buffer), reinterpret_cast<const char *>(buffer) + length);
+        }
+    }
+    IXpbBuilder_dispose(builder);
+
+    if (!status.ok() || request.empty()) {
+        setError(-200179, FormatInterfaceStatus(status.get()));
+        return false;
+    }
+
+    std::string output;
+    if (!runServiceRequest(request, output)) return false;
+
+    mServiceOutput = output;
+    return true;
+}
+
 bool FBDatabase::displayUsers() {
     auto &utilities = GetFirebirdUtilities();
     FirebirdStatusScope status;
@@ -1904,6 +2000,29 @@ void FBDatabase::setError(long code, const std::string &message) {
     clearError();
     mErrorCode = code;
     mErrorMsg = message;
+}
+
+void FBDatabase::configureServiceContext(const std::string &databasePath,
+                                         const std::string &user,
+                                         const std::string &password,
+                                         const std::string &role,
+                                         const std::string &host,
+                                         int port) {
+    mHost = host;
+    mPort = port > 0 ? port : 3050;
+    mDatabasePath = databasePath;
+    mUser = user.empty() ? "SYSDBA" : user;
+    mPassword = password;
+    mRole = role;
+    mServiceOutput.clear();
+    clearError();
+}
+
+void FBDatabase::copyServiceStateFrom(const FBDatabase &other) {
+    mServiceOutput = other.mServiceOutput;
+    mErrorCode = other.mErrorCode;
+    mErrorMsg = other.mErrorMsg;
+    memcpy(mStatus, other.mStatus, sizeof(mStatus));
 }
 
 // Schema SQL — queries Firebird system tables
