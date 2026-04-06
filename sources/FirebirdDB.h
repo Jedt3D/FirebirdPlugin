@@ -167,6 +167,7 @@ public:
     // Services API helpers
     bool backupDatabase(const std::string &backupFile);
     bool restoreDatabase(const std::string &backupFile, const std::string &targetDatabase, bool replaceExisting);
+    bool databaseStatistics();
     const std::string &lastServiceOutput() const { return mServiceOutput; }
 
     // Error state

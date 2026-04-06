@@ -134,6 +134,8 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var backupLog As String = db.LastServiceOutput
   Var restoreOk As Boolean = db.RestoreDatabase(backupPath, restorePath, True)
   Var restoreLog As String = db.LastServiceOutput
+  Var statsOk As Boolean = db.DatabaseStatistics
+  Var statsLog As String = db.LastServiceOutput
 
   // Native Xojo DatabaseRow insert convenience
   Var row As New DatabaseRow

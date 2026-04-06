@@ -184,6 +184,7 @@ End
 		  TestDatabaseAddRow
 		  TestDatabaseAddRowWithReturnValue
 		  TestServicesBackupRestore
+		  TestDatabaseStatistics
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1572,6 +1573,46 @@ End
 		  Try
 		    If restoreFile.Exists Then restoreFile.Remove
 		  Catch ex As IOException
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestDatabaseStatistics()
+		  Log "-- Test: Services database statistics --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.DatabaseStatistics Then
+		      LogPass "DatabaseStatistics"
+		    Else
+		      LogFail "DatabaseStatistics", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput
+		    If report.Trim <> "" Then
+		      LogPass "DatabaseStatistics service output"
+		    Else
+		      LogFail "DatabaseStatistics service output", "Expected gstat output"
+		    End If
+		    
+		    If report.IndexOf("Database header page information") >= 0 Or _
+		      report.IndexOf("Analyzing database pages") >= 0 Or _
+		      report.IndexOf("Database file sequence") >= 0 Then
+		      LogPass "DatabaseStatistics content"
+		    Else
+		      LogFail "DatabaseStatistics content", "Unexpected gstat output"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services database statistics", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services database statistics", ex.Message
 		  End Try
 		  
 		  db.Close

@@ -62,6 +62,7 @@ static RBInteger    fbClassTransactionLockTimeout(REALobject instance);
 static RBBoolean    fbClassBeginTransactionWithOptions(REALobject instance, REALstring isolation, RBBoolean readOnly, RBInteger lockTimeout);
 static RBBoolean    fbClassBackupDatabase(REALobject instance, REALstring backupFile);
 static RBBoolean    fbClassRestoreDatabase(REALobject instance, REALstring backupFile, REALstring targetDatabase, RBBoolean replaceExisting);
+static RBBoolean    fbClassDatabaseStatistics(REALobject instance);
 static REALstring   fbClassLastServiceOutput(REALobject instance);
 
 // Prepared statement class methods
@@ -179,6 +180,7 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassBeginTransactionWithOptions, REALnoImplementation, "BeginTransactionWithOptions(isolation As String, readOnly As Boolean, lockTimeout As Integer) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassBackupDatabase, REALnoImplementation, "BackupDatabase(backupFile As String) As Boolean", REALconsoleSafe },
     { (REALproc)fbClassRestoreDatabase, REALnoImplementation, "RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassDatabaseStatistics, REALnoImplementation, "DatabaseStatistics() As Boolean", REALconsoleSafe },
     { (REALproc)fbClassLastServiceOutput, REALnoImplementation, "LastServiceOutput() As String", REALconsoleSafe },
 };
 
@@ -1518,6 +1520,12 @@ static RBBoolean fbClassRestoreDatabase(REALobject instance, REALstring backupFi
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
     return fbd->db->restoreDatabase(RealToStd(backupFile), RealToStd(targetDatabase), replaceExisting != 0);
+}
+
+static RBBoolean fbClassDatabaseStatistics(REALobject instance) {
+    auto *fbd = GetFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+    return fbd->db->databaseStatistics();
 }
 
 static REALstring fbClassLastServiceOutput(REALobject instance) {

@@ -385,6 +385,13 @@ Sub ServicesBackupRestoreExample(db As FirebirdDatabase)
     Else
       System.DebugLog("Restore error: " + db.ErrorMessage)
     End If
+
+    If db.DatabaseStatistics Then
+      System.DebugLog("Statistics complete")
+      System.DebugLog(db.LastServiceOutput)
+    Else
+      System.DebugLog("Statistics error: " + db.ErrorMessage)
+    End If
   Catch err As RuntimeException
     System.DebugLog("Services error: " + err.Message)
   End Try

@@ -13,7 +13,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
-- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `LastServiceOutput`
+- Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
 - Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
@@ -156,12 +156,13 @@ Lock-timeout semantics:
 - `0` = `NO WAIT`
 - `> 0` = wait for that many seconds
 
-## Services API: Backup and Restore
+## Services API: Backup, Restore, and Statistics
 
 Phase 06 adds a narrow operational surface over the Firebird service manager:
 
 - `BackupDatabase(backupFile As String) As Boolean`
 - `RestoreDatabase(backupFile As String, targetDatabase As String, replaceExisting As Boolean) As Boolean`
+- `DatabaseStatistics() As Boolean`
 - `LastServiceOutput() As String`
 
 ```vb
@@ -177,13 +178,19 @@ If db.RestoreDatabase(backupFile, restoreFile, True) Then
   System.DebugLog("Restore complete")
   System.DebugLog(db.LastServiceOutput)
 End If
+
+If db.DatabaseStatistics Then
+  System.DebugLog("Statistics complete")
+  System.DebugLog(db.LastServiceOutput)
+End If
 ```
 
 Notes:
 
 - this uses server-side `gbak` through the Firebird service manager
 - the backup and restore paths must be valid from the Firebird server's point of view
-- `LastServiceOutput()` returns the verbose `gbak` log from the last service operation
+- `DatabaseStatistics()` runs Firebird database statistics for the currently connected database
+- `LastServiceOutput()` returns the verbose service output from the last backup, restore, or statistics operation
 
 ## PreparedStatement Type Binds
 
