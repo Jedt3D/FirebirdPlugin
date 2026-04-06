@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake ..)",
+      "Bash(cmake --build .)",
+      "Bash(zip -r \"../FirebirdPlugin.xojo_plugin\" FirebirdPlugin Version.info)",
+      "Bash(/Library/Frameworks/Firebird.framework/Versions/A/Resources/bin/isql -z)",
+      "Bash(python3 create_music_db.py)",
+      "Read(//tmp/firebird//**)",
+      "Bash(sudo mkdir:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(mkdir -p /tmp/firebird)",
+      "Bash(chmod 777 /tmp/firebird)",
+      "Bash(cmake .. -DCMAKE_BUILD_TYPE=Release)",
+      "Bash(cmake --build . --config Release)",
+      "Bash(find:*)",
+      "Bash(mdfind \".obsidian\")"
+    ]
+  }
+}
