@@ -264,6 +264,7 @@ This table tracks implementation progress against the plan through the currently
 | 16 | Services API limbo-recovery slice | Complete | `149 passed, 0 failed` | `feature/phase-16` | `4311cc4` | `phase_16_article.md` |
 | 17 | Services API shutdown / online control slice | Complete | `157 passed, 0 failed` | `feature/phase-17` | `924d213` | `phase_17_article.md` |
 | 18 | built-in-parity affected-row reporting slice | Complete | `162 passed, 0 failed` | `feature/phase-18` | `83b4baa` | `phase_18_article.md` |
+| 19 | SSL/TLS feasibility and API design spike | Complete | design spike complete | `feature/phase-19` | `1d0a36c` | `phase_19_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -568,11 +569,12 @@ Status: completed on April 6, 2026.
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 18
+## Progress Summary Through Phase 19
 
-Planned through Phase 18 and now complete:
+Planned through Phase 19 and now complete:
 
 - affected-row reporting for non-query execution paths
+- SSL/TLS feasibility and API design spike
 - database info helpers
 - Firebird 4/5/6 modern type support
 - transaction info helpers
@@ -596,9 +598,9 @@ Planned through Phase 18 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 18:
+Still outside completed scope after Phase 19:
 
-- SSL/TLS parity work
+- connection-level `WireCrypt` / `AuthClientPlugins` implementation
 - dedicated large-object / streaming BLOB surface
 - broader user-management workflows
 - broader maintenance/repair services
@@ -616,7 +618,9 @@ Still outside completed scope after Phase 18:
 
 ### Do next
 
-- run an SSL/TLS feasibility spike using PostgreSQL-style parity as the target shape
+- implement connection-level `WireCrypt`
+- implement connection-level `AuthClientPlugins`
+- decide whether a limited `SSLMode` alias is worth exposing
 - evaluate a dedicated Firebird large-object / streaming BLOB API
 - decide whether Firebird event APIs are worth exposing in the public Xojo surface
 

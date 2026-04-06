@@ -4,6 +4,8 @@ Last updated: April 7, 2026
 
 This draft was refreshed after pulling `main` at commit `78cbe85`, which includes the latest Windows FB5/FB6 build updates.
 
+Phase 19 closes the SSL/TLS feasibility spike and confirms the next implementation target should be Firebird-native connection-security controls, not a fake PostgreSQL certificate-property clone.
+
 ## Goal
 
 The essential goal is to make the Firebird plugin feel closer to a first-class built-in Xojo database driver.
@@ -33,6 +35,7 @@ The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md
 - a dedicated BLOB object only if streaming use cases matter
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
+Phase 19 closes the SSL/TLS feasibility spike.
 
 ## Decision Update From User Direction
 
@@ -60,7 +63,7 @@ It also means `RowSet` work should be treated carefully:
 
 This is the highest-value track because it most directly affects how Xojo developers experience the plugin.
 
-### 1. SSL/TLS connection controls
+### 1. Firebird-native connection-security controls
 
 Priority: High  
 Difficulty: Medium to high  
@@ -97,18 +100,18 @@ Difference between the minimal and PostgreSQL-style approaches:
 - simple on/off support only decides whether the driver should attempt TLS at all
 - PostgreSQL-style support also lets the caller choose verification behavior and supply certificate material
 
-Recommended parity target:
+Phase 19 conclusion:
 
-- prefer the PostgreSQL-style shape, not just a boolean toggle
-- the smallest serious production-grade target is:
-  - `SSLMode`
-  - `SSLKey`
-  - `SSLCertificate`
-  - `SSLAuthority`
+- do not start with PostgreSQL-style certificate-path properties
+- the clean first implementation is:
+  - `WireCrypt`
+  - `AuthClientPlugins`
+- a limited `SSLMode` alias is acceptable only as a convenience wrapper over `WireCrypt`
 
 Recommendation:
 
-- do not promise this feature until a short design spike proves it can be exposed cleanly
+- implement Firebird-native connection-security controls first
+- defer certificate-path properties until official per-connection support is proven clearly
 
 ### 2. `RowSet` capability improvements
 
@@ -214,8 +217,8 @@ This is the right long-term differentiator because Xojo's built-in drivers do no
 
 If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is:
 
-1. SSL/TLS feasibility spike and API design
-2. SSL/TLS implementation only if the spike succeeds
+1. implement `WireCrypt` and `AuthClientPlugins`
+2. add a limited `SSLMode` alias only if it improves ergonomics cleanly
 3. dedicated Firebird large-object / streaming BLOB design, modeled after PostgreSQL's large-object workflow
 4. event/notification support only if Firebird's event model maps cleanly enough to a PostgreSQL-like Xojo surface
 5. `RowSet` improvements after the PostgreSQL-parity items above are settled
@@ -242,7 +245,8 @@ The correct approach is:
 
 ### Wave 1: Immediate parity wins
 
-- SSL/TLS feasibility investigation
+- implement `WireCrypt`
+- implement `AuthClientPlugins`
 - PostgreSQL large-object parity investigation
 
 Expected value:
@@ -283,7 +287,7 @@ These are the questions I need you to answer before implementation starts:
 
 1. Is your top priority developer ergonomics for normal app code, or enterprise/deployment credibility?
    - Answer received: both, but ergonomics first and deployment/security second.
-   - Result: after Phase 18 closed `AffectedRowCount`, SSL/TLS is now first.
+   - Result: after Phase 19, Firebird-native connection-security controls are now first.
 
 2. Do you want strict built-in-driver mimicry, or are you comfortable with Firebird-native method names when the engine differs?
    - I recommend Firebird-native naming where behavior is not truly equivalent.
@@ -311,7 +315,7 @@ These are the questions I need you to answer before implementation starts:
 Using `PostgreSQLDatabase` as the gold standard implies these practical targets:
 
 - `AffectedRowCount` parity is complete in Phase 18
-- SSL/TLS should look more like PostgreSQL's `SSLMode`, `SSLKey`, `SSLCertificate`, and `SSLAuthority` than like a single on/off switch
+- Firebird security parity is only partial: `SSLMode` can map narrowly, but certificate-path properties are not yet justified by the official Firebird connection model
 - large-object support should look more like `CreateLargeObject`, `OpenLargeObject`, `DeleteLargeObject`, plus a dedicated object for `Read`, `Write`, `Seek`, and `Tell`
 - event support should aim for a Xojo-style pattern similar to:
   - `Listen`
@@ -330,12 +334,13 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. run an SSL/TLS feasibility spike using PostgreSQL-style parity as the design target
-2. if feasible, implement SSL/TLS with a small but production-credible property set
-3. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
-4. defer event support until after that unless a real application need appears immediately
-5. treat `RowSet` enhancement as a secondary polish track unless it exposes a concrete PostgreSQL-parity gap
-6. then continue expanding Firebird's distinctive admin/service strengths
+1. implement `WireCrypt`
+2. implement `AuthClientPlugins`
+3. add a limited `SSLMode` alias only if it stays honest and clearly documented
+4. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
+5. defer event support until after that unless a real application need appears immediately
+6. treat `RowSet` enhancement as a secondary polish track unless it exposes a concrete PostgreSQL-parity gap
+7. then continue expanding Firebird's distinctive admin/service strengths
 
 Why this is best:
 
@@ -348,12 +353,12 @@ Why this is best:
 
 Default recommended next step:
 
-- SSL/TLS feasibility and API design spike
+- implement `WireCrypt`
 
 Default recommended second step:
 
-- dedicated Firebird large-object / streaming BLOB design
+- implement `AuthClientPlugins`
 
 Default recommended third step:
 
-- event/notification feasibility after the large-object direction is clear
+- add a limited `SSLMode` alias only if the ergonomics win is worth it
