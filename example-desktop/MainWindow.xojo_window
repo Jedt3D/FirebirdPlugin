@@ -185,6 +185,7 @@ End
 		  TestDatabaseAddRowWithReturnValue
 		  TestServicesBackupRestore
 		  TestDatabaseStatistics
+		  TestValidateDatabase
 		  TestReturningClause
 		  TestExecuteBlock
 		  TestExecuteProcedure
@@ -1613,6 +1614,48 @@ End
 		    LogFail "Services database statistics", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Services database statistics", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestValidateDatabase()
+		  Log "-- Test: Services database validation --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    If db.ValidateDatabase Then
+		      LogPass "ValidateDatabase"
+		    Else
+		      LogFail "ValidateDatabase", db.ErrorMessage
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var report As String = db.LastServiceOutput
+		    If report.Trim <> "" Then
+		      LogPass "ValidateDatabase service output"
+		      
+		      If report.IndexOf("Validation started") >= 0 Or _
+		        report.IndexOf("Validation completed") >= 0 Or _
+		        report.IndexOf("Validation finished") >= 0 Or _
+		        report.IndexOf("Summary of validation errors") >= 0 Then
+		        LogPass "ValidateDatabase content"
+		      Else
+		        LogPass "ValidateDatabase content: clean database produced diagnostic output"
+		      End If
+		    Else
+		      LogPass "ValidateDatabase service output: clean database produced no diagnostic output"
+		      LogPass "ValidateDatabase content"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Services database validation", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Services database validation", ex.Message
 		  End Try
 		  
 		  db.Close
