@@ -1,3 +1,0 @@
-LIBRARY FirebirdPlugin
-EXPORTS
-    REALPluginMain

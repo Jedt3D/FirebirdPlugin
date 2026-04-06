@@ -2,7 +2,7 @@
 
 #include "FirebirdDB.h"
 
-#ifdef _WIN64
+#if defined(_WIN64) && defined(__aarch64__)
 // ARM64 builds use dynamic loading for cross-architecture support
 #include "FirebirdLoader.h"
 
