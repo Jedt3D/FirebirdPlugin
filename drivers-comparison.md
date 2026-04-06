@@ -281,12 +281,13 @@ Compared with PostgreSQL and SQLite, Firebird currently lacks:
 
 ### C. `RowSet` richness
 
-The current Firebird cursor implementation is thinner than SQLite's. Internally, the plugin cursor does not implement previous/first/last row navigation or row-edit/update/delete hooks.
+The current Firebird cursor implementation is still thinner than SQLite's, but the gap is smaller now. Internally, the plugin cursor now supports buffered previous/first/last row navigation and a real `RowCount`, but it still does not expose row-edit/update/delete hooks.
 
 That means:
 
-- it is fine for normal forward iteration
-- it is not yet as feature-rich as SQLite's dynamic `RowSet`
+- it is now good for normal forward iteration and common read-navigation
+- it is still not as feature-rich as SQLite's dynamic `RowSet`
+- the remaining gap is mainly editable cursor behavior, not basic navigation
 
 ### D. Bundling / ecosystem maturity
 
@@ -373,7 +374,7 @@ The Firebird plugin is still behind the built-ins in:
 - PostgreSQL notifications
 - PostgreSQL large objects
 - SQLite backup/blob/encryption/attachment/WAL tooling
-- richer `RowSet` behavior
+- editable `RowSet` behavior
 
 ### Stronger than the built-ins
 
@@ -388,13 +389,14 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Improve `RowSet` capability only where it creates a real built-in-driver parity gain
-2. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
-3. Consider a dedicated Firebird BLOB object only if streaming use cases appear often
-4. Decide whether a limited `SSLMode` alias over `WireCrypt` is worth exposing
+1. Decide whether a limited `SSLMode` alias over `WireCrypt` is worth exposing
+2. Consider a dedicated Firebird BLOB object if streaming use cases appear often
+3. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+4. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
+Phase 21 closes the forward-only `RowSet` navigation gap through buffered read navigation and real `RowCount`.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 

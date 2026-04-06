@@ -5,6 +5,7 @@ Last updated: April 7, 2026
 This draft was refreshed after pulling `main` at commit `78cbe85`, which includes the latest Windows FB5/FB6 build updates.
 
 Phase 20 closes the first connection-security implementation slice through `WireCrypt` and `AuthClientPlugins`.
+Phase 21 closes the first `RowSet` ergonomics slice through buffered read navigation and real `RowCount`.
 
 ## Goal
 
@@ -30,13 +31,14 @@ The Firebird plugin is already strong in:
 The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md) are:
 
 - PostgreSQL-style certificate and `SSLMode` controls
-- richer `RowSet` behavior
+- PostgreSQL-style large-object support
 - event/notification-style support
-- a dedicated BLOB object only if streaming use cases matter
+- editable `RowSet` behavior only if it creates a real Xojo-visible gain
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 19 closes the SSL/TLS feasibility spike.
 Phase 20 closes the first Firebird-native connection-security implementation slice.
+Phase 21 closes the first `RowSet` ergonomics slice through buffered read navigation and real `RowCount`.
 
 ## Decision Update From User Direction
 
@@ -335,10 +337,10 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. improve `RowSet` read-navigation behavior to the level users expect from a first-class Xojo driver
-2. add a limited `SSLMode` alias only if it stays honest and clearly documented
-3. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
-4. defer event support until after that unless a real application need appears immediately
+1. add a limited `SSLMode` alias only if it stays honest and clearly documented
+2. design a Firebird large-object / streaming BLOB API modeled on PostgreSQL's Xojo surface
+3. defer event support until after that unless a real application need appears immediately
+4. revisit editable `RowSet` behavior only if a strong Xojo use case appears
 5. then continue expanding Firebird's distinctive admin/service strengths
 
 Why this is best:
@@ -352,12 +354,12 @@ Why this is best:
 
 Default recommended next step:
 
-- improve `RowSet` capability
+- add a limited `SSLMode` alias only if it improves ergonomics cleanly and stays an honest wrapper over Firebird semantics
 
 Default recommended second step:
 
-- add a limited `SSLMode` alias only if it improves ergonomics cleanly
+- design a dedicated Firebird large-object / streaming BLOB surface
 
 Default recommended third step:
 
-- design a dedicated Firebird large-object / streaming BLOB surface
+- evaluate event support only if there is a real app-driven need

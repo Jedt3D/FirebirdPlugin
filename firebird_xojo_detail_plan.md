@@ -266,6 +266,7 @@ This table tracks implementation progress against the plan through the currently
 | 18 | built-in-parity affected-row reporting slice | Complete | `162 passed, 0 failed` | `feature/phase-18` | `83b4baa` | `phase_18_article.md` |
 | 19 | SSL/TLS feasibility and API design spike | Complete | design spike complete | `feature/phase-19` | `b681d5f` | `phase_19_article.md` |
 | 20 | Firebird-native connection-security properties slice | Complete | `166 passed, 0 failed` | `feature/phase-20` | `588c217` | `phase_20_article.md` |
+| 21 | buffered `RowSet` read-navigation slice | Complete | `172 passed, 0 failed` | `feature/phase-21` | `a5367c1` | `phase_21_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -279,7 +280,7 @@ This table tracks implementation progress against the plan through the currently
 - prepared statements
 - string, integer, double, boolean, `DateTime`, and null binding through Xojo
 - text BLOB and binary BLOB binding through Xojo prepared statements
-- row iteration and column access
+- row iteration, buffered read navigation, and column access
 - transaction begin, commit, rollback
 - transaction info helpers for active transaction inspection
 - explicit TPB-backed transaction options for isolation, read-only/read-write, and lock timeout
@@ -407,6 +408,7 @@ Current suite entry points:
 - `TestSelectSQLUnicodeThai`
 - `TestSelectSQLWithParams`
 - `TestRowSetIteration`
+- `TestRowSetNavigation`
 - `TestRowSetColumnAccess`
 - `TestExecuteSQL`
 - `TestTransaction`
@@ -571,13 +573,14 @@ Status: completed on April 6, 2026.
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 20
+## Progress Summary Through Phase 21
 
-Planned through Phase 20 and now complete:
+Planned through Phase 21 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
 - Firebird-native `WireCrypt` / `AuthClientPlugins` connection properties
+- buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
 - transaction info helpers
@@ -601,7 +604,7 @@ Planned through Phase 20 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 20:
+Still outside completed scope after Phase 21:
 
 - PostgreSQL-style `SSLMode` alias and certificate-path properties
 - dedicated large-object / streaming BLOB surface
@@ -621,10 +624,10 @@ Still outside completed scope after Phase 20:
 
 ### Do next
 
-- improve `RowSet` capability where it creates a real built-in-driver parity gain
 - decide whether a limited `SSLMode` alias is worth exposing
 - evaluate a dedicated Firebird large-object / streaming BLOB API
 - decide whether Firebird event APIs are worth exposing in the public Xojo surface
+- revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
 
 ### Defer until after the above
 
