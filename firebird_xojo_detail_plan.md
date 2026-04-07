@@ -231,7 +231,7 @@ The checklist below compares the current Xojo plugin to that surface.
 | Transaction info API | `isc_transaction_info` | `[x]` | Phase 03 added inspection helpers and Phase 04 added explicit TPB-backed transaction controls |
 | Request API / BLR style APIs | low-level request functions | `[ ]` | Not implemented and probably out of scope for Xojo v1 |
 | Event API | `isc_event_*` | `[ ]` | Not implemented |
-| Security/user management core API | security-related APIs | `[-]` | Connection security properties (`WireCrypt`, `AuthClientPlugins`) and service-manager user operations are implemented; broader security surface is still open |
+| Security/user management core API | security-related APIs | `[-]` | Connection security properties (`WireCrypt`, `AuthClientPlugins`, `SSLMode`) and service-manager user operations are implemented; broader security surface is still open |
 | Services API | backup, restore, statistics, validation, user management, trace, etc. | `[-]` | Phase 17 extends the first slice to backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output |
 | Type conversions for text and date/time | helper functions and driver mapping | `[x]` | Current plugin maps common legacy types to Xojo values |
 | `INT128` support | newer data type support | `[x]` | Exposed through `StringValue` and type-aware string binding |
@@ -267,6 +267,7 @@ This table tracks implementation progress against the plan through the currently
 | 19 | SSL/TLS feasibility and API design spike | Complete | design spike complete | `feature/phase-19` | `b681d5f` | `phase_19_article.md` |
 | 20 | Firebird-native connection-security properties slice | Complete | `166 passed, 0 failed` | `feature/phase-20` | `588c217` | `phase_20_article.md` |
 | 21 | buffered `RowSet` read-navigation slice | Complete | `172 passed, 0 failed` | `feature/phase-21` | `a5367c1` | `phase_21_article.md` |
+| 22 | limited `SSLMode` alias over `WireCrypt` | Complete | `175 passed, 0 failed` | `feature/phase-22` | `9179762` | `phase_22_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -286,7 +287,7 @@ This table tracks implementation progress against the plan through the currently
 - explicit TPB-backed transaction options for isolation, read-only/read-write, and lock timeout
 - schema helpers: tables, columns, indexes
 - database info helpers backed by `isc_database_info`
-- Firebird-native connection-security properties: `WireCrypt`, `AuthClientPlugins`
+- Firebird-native connection-security properties: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Services API first slice for backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
 - Firebird 4/5/6 modern type mapping: `INT128`, `DECFLOAT`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE` via string semantics
@@ -573,13 +574,14 @@ Status: completed on April 6, 2026.
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 21
+## Progress Summary Through Phase 22
 
-Planned through Phase 21 and now complete:
+Planned through Phase 22 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
 - Firebird-native `WireCrypt` / `AuthClientPlugins` connection properties
+- limited `SSLMode` alias over `WireCrypt`
 - buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -604,9 +606,9 @@ Planned through Phase 21 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 21:
+Still outside completed scope after Phase 22:
 
-- PostgreSQL-style `SSLMode` alias and certificate-path properties
+- PostgreSQL-style certificate-path properties
 - dedicated large-object / streaming BLOB surface
 - broader user-management workflows
 - broader maintenance/repair services
@@ -624,9 +626,9 @@ Still outside completed scope after Phase 21:
 
 ### Do next
 
-- decide whether a limited `SSLMode` alias is worth exposing
 - evaluate a dedicated Firebird large-object / streaming BLOB API
 - decide whether Firebird event APIs are worth exposing in the public Xojo surface
+- revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 - revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
 
 ### Defer until after the above

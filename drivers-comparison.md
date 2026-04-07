@@ -109,6 +109,7 @@ These methods are not part of the standard Xojo `Database` API and represent plu
 - `AffectedRowCount() As Int64`
 - `WireCrypt As String`
 - `AuthClientPlugins As String`
+- `SSLMode As Integer`
 - `ServerVersion() As String`
 - `PageSize() As Integer`
 - `DatabaseSQLDialect() As Integer`
@@ -167,7 +168,6 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 
 - `AppName`
 - `MultiThreaded`
-- `SSLMode`
 - `SSLKey`
 - `SSLCertificate`
 - `SSLAuthority`
@@ -184,7 +184,7 @@ Technical impact:
 
 - PostgreSQL is ahead on async/event-style database integration
 - PostgreSQL is ahead on native large-object tooling
-- PostgreSQL is ahead on connection tunability and SSL controls
+- PostgreSQL is still ahead on certificate-validation semantics and SSL material controls
 
 ### SQLiteDatabase
 
@@ -266,7 +266,7 @@ From a practical text-handling point of view, the Firebird plugin is currently i
 
 Compared with MySQL and PostgreSQL, Firebird currently lacks:
 
-- public SSL/TLS connection controls
+- PostgreSQL-style certificate-path SSL/TLS controls
 - richer connection tuning options
 - driver-level compatibility knobs
 
@@ -370,7 +370,7 @@ The Firebird plugin is already on par for:
 
 The Firebird plugin is still behind the built-ins in:
 
-- PostgreSQL-style certificate and SSL-mode controls
+- PostgreSQL-style certificate controls
 - PostgreSQL notifications
 - PostgreSQL large objects
 - SQLite backup/blob/encryption/attachment/WAL tooling
@@ -389,14 +389,15 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Decide whether a limited `SSLMode` alias over `WireCrypt` is worth exposing
-2. Consider a dedicated Firebird BLOB object if streaming use cases appear often
-3. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
-4. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
+1. Consider a dedicated Firebird BLOB object if streaming use cases appear often
+2. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+3. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
+4. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
 Phase 21 closes the forward-only `RowSet` navigation gap through buffered read navigation and real `RowCount`.
+Phase 22 closes the narrow PostgreSQL-style `SSLMode` alias gap through an honest wrapper over `WireCrypt`.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 
