@@ -12,6 +12,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `AffectedRowCount` property for the last non-query execution path
 - Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Buffered `RowSet` read navigation: `RowCount`, `MoveToPreviousRow`, `MoveToFirstRow`, `MoveToLastRow`
+- Firebird event notifications: `Listen`, `StopListening`, `CheckForNotifications`, `Notify`, `ReceivedNotification(name, count)`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
@@ -190,6 +191,51 @@ Notes:
 - `SSLMode = 4` and `SSLMode = 5` are rejected because this plugin does not expose certificate-validation semantics
 - these properties apply to both ordinary remote attachments and service-manager control operations
 - this is intentionally Firebird-native, not a fake certificate-path API
+
+## Event Notifications
+
+`FirebirdDatabase` now exposes a limited Firebird-native event API:
+
+- `Listen(name As String)`
+- `StopListening(name As String)`
+- `CheckForNotifications()`
+- `Notify(name As String)`
+- `ReceivedNotification(name As String, count As Integer)`
+
+```vb
+Var listener As New FirebirdDatabase
+listener.Host = "localhost"
+listener.DatabaseName = "/var/firebird/data/myapp.fdb"
+listener.UserName = "SYSDBA"
+listener.Password = "masterkey"
+
+Var sender As New FirebirdDatabase
+sender.Host = listener.Host
+sender.DatabaseName = listener.DatabaseName
+sender.UserName = listener.UserName
+sender.Password = listener.Password
+
+AddHandler listener.ReceivedNotification, AddressOf HandleFirebirdNotification
+
+listener.Connect
+listener.Listen("RefreshAll")
+
+sender.Connect
+sender.Notify("RefreshAll")
+
+// Usually call this from a Timer
+listener.CheckForNotifications
+
+Sub HandleFirebirdNotification(sender As FirebirdDatabase, name As String, count As Integer)
+  System.DebugLog(name + " x" + count.ToString)
+End Sub
+```
+
+Notes:
+
+- `CheckForNotifications()` is the queue-drain point that raises the Xojo event
+- `Notify(name)` posts a Firebird event through `POST_EVENT`, so delivery still occurs on commit
+- Firebird events expose `name` and `count`; there is no PostgreSQL-style sender ID or payload string
 
 ## Firebird-Specific Metadata
 

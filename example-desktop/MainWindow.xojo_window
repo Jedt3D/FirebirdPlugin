@@ -128,6 +128,14 @@ End
 	#tag EndMethod
 
 	#tag Method, Flags = &h1
+		Protected Sub HandleReceivedNotification(sender As FirebirdDatabase, name As String, count As Integer)
+		  mNotificationName = name
+		  mNotificationCount = mNotificationCount + count
+		  mNotificationReceived = True
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
 		Protected Function CurrentSweepInterval() As Integer
 		  Var readDb As FirebirdDatabase = OpenTestDB
 		  If readDb = Nil Then Return -1
@@ -296,6 +304,7 @@ End
 		  TestExecuteSQL
 		  TestAffectedRowCount
 		  TestConnectionSecurityOptions
+		  TestEventNotifications
 		  TestTransaction
 		  TestTransactionRollback
 		  TestTransactionInfo
@@ -761,6 +770,108 @@ End
 		  Catch ex As DatabaseException
 		    LogPass "Invalid AuthClientPlugins rejected"
 		  End Try
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestEventNotifications()
+		  Log "-- Test: Event notifications --"
+
+		  Var listener As FirebirdDatabase = OpenTestDB
+		  If listener = Nil Then Return
+
+		  Var sender As FirebirdDatabase = OpenTestDB
+		  If sender = Nil Then
+		    listener.Close
+		    Return
+		  End If
+
+		  Var eventName As String = "PHASE25_REFRESH"
+		  mNotificationName = ""
+		  mNotificationCount = 0
+		  mNotificationReceived = False
+
+		  AddHandler listener.ReceivedNotification, AddressOf HandleReceivedNotification
+
+		  Try
+		    listener.Listen(eventName)
+		    If listener.ErrorMessage = "" Then
+		      LogPass "Listen"
+		    Else
+		      LogFail "Listen", listener.ErrorMessage
+		      sender.Close
+		      listener.Close
+		      RemoveHandler listener.ReceivedNotification, AddressOf HandleReceivedNotification
+		      Return
+		    End If
+
+		    sender.Notify(eventName)
+		    If sender.ErrorMessage = "" Then
+		      LogPass "Notify"
+		    Else
+		      LogFail "Notify", sender.ErrorMessage
+		      sender.Close
+		      listener.Close
+		      RemoveHandler listener.ReceivedNotification, AddressOf HandleReceivedNotification
+		      Return
+		    End If
+
+		    Var delivered As Boolean = False
+		    For attempt As Integer = 1 To 5000
+		      listener.CheckForNotifications
+		      If listener.ErrorMessage <> "" Then Exit For
+		      If mNotificationReceived Then
+		        delivered = True
+		        Exit
+		      End If
+		    Next
+
+		    If listener.ErrorMessage <> "" Then
+		      LogFail "CheckForNotifications", listener.ErrorMessage
+		    ElseIf delivered And mNotificationName = eventName And mNotificationCount > 0 Then
+		      LogPass "ReceivedNotification"
+		    Else
+		      LogFail "ReceivedNotification", "Expected " + eventName + " with count > 0"
+		    End If
+
+		    mNotificationName = ""
+		    mNotificationCount = 0
+		    mNotificationReceived = False
+
+		    listener.StopListening(eventName)
+		    If listener.ErrorMessage = "" Then
+		      LogPass "StopListening"
+		    Else
+		      LogFail "StopListening", listener.ErrorMessage
+		    End If
+
+		    sender.Notify(eventName)
+		    If sender.ErrorMessage <> "" Then
+		      LogFail "Notify after StopListening", sender.ErrorMessage
+		    End If
+
+		    For attempt As Integer = 1 To 5000
+		      listener.CheckForNotifications
+		      If listener.ErrorMessage <> "" Then Exit For
+		      If mNotificationReceived Then Exit
+		    Next
+
+		    If listener.ErrorMessage <> "" Then
+		      LogFail "StopListening readback", listener.ErrorMessage
+		    ElseIf Not mNotificationReceived Then
+		      LogPass "StopListening readback"
+		    Else
+		      LogFail "StopListening readback", "Notification should not have fired after StopListening"
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "Event notifications", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "Event notifications", ex.Message
+		  End Try
+
+		  RemoveHandler listener.ReceivedNotification, AddressOf HandleReceivedNotification
+		  sender.Close
+		  listener.Close
 		End Sub
 	#tag EndMethod
 
@@ -3325,6 +3436,18 @@ End
 
 	#tag Property, Flags = &h1
 		Protected mFailCount As Integer
+	#tag EndProperty
+
+	#tag Property, Flags = &h1
+		Protected mNotificationCount As Integer
+	#tag EndProperty
+
+	#tag Property, Flags = &h1
+		Protected mNotificationName As String
+	#tag EndProperty
+
+	#tag Property, Flags = &h1
+		Protected mNotificationReceived As Boolean
 	#tag EndProperty
 
 	#tag Property, Flags = &h1

@@ -9,19 +9,31 @@
 #include "FirebirdLoader.h"
 
 // Macros to redirect function calls to pointers for ARM64 builds
+#define isc_cancel_events ptr_isc_cancel_events
+#define isc_que_events ptr_isc_que_events
+#define isc_event_block ptr_isc_event_block
+#define isc_event_counts ptr_isc_event_counts
+#define isc_free ptr_isc_free
 #define isc_encode_sql_date ptr_isc_encode_sql_date
 #define isc_encode_sql_time ptr_isc_encode_sql_time
 #define isc_encode_timestamp ptr_isc_encode_timestamp
 #define isc_decode_sql_date ptr_isc_decode_sql_date
 #define isc_decode_sql_time ptr_isc_decode_sql_time
 #define isc_decode_timestamp ptr_isc_decode_timestamp
+#define isc_sqlcode ptr_isc_sqlcode
+#define fb_interpret ptr_fb_interpret
 #endif
 
+#include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <sstream>
+#include <thread>
 #include <ctime>
 #include <vector>
 
@@ -66,6 +78,10 @@ static RBBoolean    fbCursorIsEOF(dbCursor *);
 static void         fbClassConstructor(REALobject instance);
 static void         fbClassDestructor(REALobject instance);
 static RBBoolean    fbClassConnect(REALobject instance);
+static void         fbClassListen(REALobject instance, REALstring name);
+static void         fbClassStopListening(REALobject instance, REALstring name);
+static void         fbClassCheckForNotifications(REALobject instance);
+static void         fbClassNotify(REALobject instance, REALstring name);
 static REALstring   fbClassWireCryptGet(REALobject instance, long param);
 static void         fbClassWireCryptSet(REALobject instance, long param, REALstring value);
 static RBInteger    fbClassSSLModeGet(REALobject instance, long param);
@@ -182,6 +198,10 @@ static REALdbCursorDefinition sFirebirdCursor = {
 
 // --- FirebirdDatabase Class -------------------------------------------------
 
+static REALevent sFirebirdClassEvents[] = {
+    { "ReceivedNotification(name As String, count As Integer)" },
+};
+
 static REALproperty sFirebirdClassProperties[] = {
     { "", "Host", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, host) },
@@ -208,6 +228,10 @@ static REALproperty sFirebirdClassProperties[] = {
 
 static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassConnect, REALnoImplementation, "Connect() As Boolean", REALconsoleSafe },
+    { (REALproc)fbClassListen, REALnoImplementation, "Listen(name As String)", REALconsoleSafe },
+    { (REALproc)fbClassStopListening, REALnoImplementation, "StopListening(name As String)", REALconsoleSafe },
+    { (REALproc)fbClassCheckForNotifications, REALnoImplementation, "CheckForNotifications()", REALconsoleSafe },
+    { (REALproc)fbClassNotify, REALnoImplementation, "Notify(name As String)", REALconsoleSafe },
     { (REALproc)fbClassServerVersion, REALnoImplementation, "ServerVersion() As String", REALconsoleSafe },
     { (REALproc)fbClassPageSize, REALnoImplementation, "PageSize() As Integer", REALconsoleSafe },
     { (REALproc)fbClassDatabaseSQLDialect, REALnoImplementation, "DatabaseSQLDialect() As Integer", REALconsoleSafe },
@@ -251,7 +275,8 @@ static REALclassDefinition sFirebirdDatabaseClass = {
     sizeof(sFirebirdClassProperties) / sizeof(REALproperty),
     sFirebirdClassMethods,
     sizeof(sFirebirdClassMethods) / sizeof(REALmethodDefinition),
-    nullptr, 0,                              // events
+    sFirebirdClassEvents,
+    sizeof(sFirebirdClassEvents) / sizeof(REALevent),
     nullptr, 0,                              // eventInstances
     nullptr,                                 // interfaces
     nullptr, 0,                              // attributes
@@ -405,11 +430,327 @@ static FirebirdDbData *EnsureFirebirdDbData(REALobject instance) {
     auto *newData = new FirebirdDbData;
     newData->db = fb;
     newData->autoCommit = true;
+    newData->events = nullptr;
 
     REALdbDatabase realDb = (REALdbDatabase)instance;
     REALConstructDBDatabase(realDb, (dbDatabase *)newData, &sFirebirdEngine);
     REALSetDBIsConnected(realDb, false);
     return newData;
+}
+
+struct FirebirdPendingNotification {
+    std::string name;
+    ISC_ULONG count = 0;
+};
+
+struct FirebirdEventState {
+    FirebirdDbData *owner = nullptr;
+    isc_db_handle *dbHandle = nullptr;
+    ISC_SCHAR *eventBuffer = nullptr;
+    ISC_SCHAR *resultBuffer = nullptr;
+    ISC_USHORT bufferLength = 0;
+    ISC_LONG eventId = 0;
+    bool armed = false;
+    std::vector<std::string> names;
+    std::vector<FirebirdPendingNotification> pending;
+    std::mutex mutex;
+    std::atomic<bool> closing{false};
+    std::atomic<int> callbackDepth{0};
+    std::atomic<uint64_t> generation{0};
+};
+
+static FirebirdEventState *EnsureEventState(FirebirdDbData *fbd) {
+    if (!fbd) return nullptr;
+    if (!fbd->events) {
+        auto *state = new FirebirdEventState;
+        state->owner = fbd;
+        if (fbd->db) state->dbHandle = &fbd->db->dbHandle();
+        fbd->events = state;
+    }
+    return fbd->events;
+}
+
+static std::string TrimASCII(const std::string &text) {
+    size_t start = 0;
+    while (start < text.size() && std::isspace((unsigned char)text[start])) start = start + 1;
+
+    size_t finish = text.size();
+    while (finish > start && std::isspace((unsigned char)text[finish - 1])) finish = finish - 1;
+
+    return text.substr(start, finish - start);
+}
+
+static std::string EscapeSqlLiteral(const std::string &text) {
+    std::string escaped;
+    escaped.reserve(text.size() + 8);
+    for (char ch : text) {
+        escaped.push_back(ch);
+        if (ch == '\'') escaped.push_back('\'');
+    }
+    return escaped;
+}
+
+static void SetStatusError(FBDatabase *db, ISC_STATUS *status) {
+    if (!db) return;
+
+    char buffer[512];
+    std::ostringstream message;
+    const ISC_STATUS *vector = status;
+    const long code = isc_sqlcode(status);
+
+    while (fb_interpret(buffer, sizeof(buffer), &vector)) {
+        if (!message.str().empty()) message << '\n';
+        message << buffer;
+    }
+
+    db->setError(code, message.str().empty() ? "Firebird event API call failed" : message.str());
+}
+
+static void FreeEventBuffers(FirebirdEventState *state) {
+    if (!state) return;
+
+    if (state->eventBuffer) {
+        isc_free(state->eventBuffer);
+        state->eventBuffer = nullptr;
+    }
+
+    if (state->resultBuffer) {
+        isc_free(state->resultBuffer);
+        state->resultBuffer = nullptr;
+    }
+
+    state->bufferLength = 0;
+}
+
+static bool BuildEventBlock(FBDatabase *db, FirebirdEventState *state) {
+    if (!db || !state) return false;
+
+    switch (state->names.size()) {
+        case 0:
+            state->bufferLength = 0;
+            return true;
+        case 1:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              1, state->names[0].c_str());
+            return true;
+        case 2:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              2, state->names[0].c_str(), state->names[1].c_str());
+            return true;
+        case 3:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              3, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str());
+            return true;
+        case 4:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              4, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str(), state->names[3].c_str());
+            return true;
+        case 5:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              5, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str(), state->names[3].c_str(), state->names[4].c_str());
+            return true;
+        case 6:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              6, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str(), state->names[3].c_str(), state->names[4].c_str(), state->names[5].c_str());
+            return true;
+        case 7:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              7, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str(), state->names[3].c_str(), state->names[4].c_str(), state->names[5].c_str(), state->names[6].c_str());
+            return true;
+        case 8:
+            state->bufferLength = (ISC_USHORT)isc_event_block((ISC_UCHAR **)&state->eventBuffer, (ISC_UCHAR **)&state->resultBuffer,
+                                                              8, state->names[0].c_str(), state->names[1].c_str(), state->names[2].c_str(), state->names[3].c_str(), state->names[4].c_str(), state->names[5].c_str(), state->names[6].c_str(), state->names[7].c_str());
+            return true;
+        default:
+            db->setError(-200166, "A maximum of 8 Firebird event names can be listened for at once");
+            return false;
+    }
+}
+
+static void WaitForEventCallbacksToDrain(FirebirdEventState *state) {
+    if (!state) return;
+
+    while (state->callbackDepth.load() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+static void FireReceivedNotificationEvent(REALobject instance, const std::string &name, RBInteger count) {
+    typedef void (*FirebirdNotificationEventTy)(REALobject instance, REALstring name, RBInteger count);
+
+    FirebirdNotificationEventTy callback =
+        (FirebirdNotificationEventTy)REALGetEventInstance((REALcontrolInstance)instance, &sFirebirdClassEvents[0]);
+    if (!callback) return;
+
+    REALstring eventName = StdToReal(name);
+    callback(instance, eventName, count);
+    if (eventName) REALUnlockString(eventName);
+}
+
+static void ISC_EXPORT FirebirdEventCallback(void *arg, ISC_USHORT length, const ISC_UCHAR *updated) {
+    auto *state = static_cast<FirebirdEventState *>(arg);
+    if (!state) return;
+
+    state->callbackDepth.fetch_add(1);
+    const uint64_t callbackGeneration = state->generation.load();
+
+    if (state->closing.load()) {
+        state->callbackDepth.fetch_sub(1);
+        return;
+    }
+
+    isc_db_handle *dbHandle = nullptr;
+    ISC_UCHAR *eventBuffer = nullptr;
+    ISC_USHORT bufferLength = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->armed = false;
+        state->eventId = 0;
+
+        if (state->resultBuffer && updated && !state->names.empty()) {
+            std::vector<ISC_ULONG> counts(state->names.size(), 0);
+            isc_event_counts(counts.data(), (short)length,
+                             reinterpret_cast<ISC_UCHAR *>(state->resultBuffer), updated);
+
+            for (size_t i = 0; i < counts.size(); ++i) {
+                if (counts[i] == 0) continue;
+
+                bool merged = false;
+                for (auto &pending : state->pending) {
+                    if (pending.name == state->names[i]) {
+                        pending.count += counts[i];
+                        merged = true;
+                        break;
+                    }
+                }
+
+                if (!merged) {
+                    FirebirdPendingNotification pending;
+                    pending.name = state->names[i];
+                    pending.count = counts[i];
+                    state->pending.push_back(pending);
+                }
+            }
+
+            std::memcpy(state->resultBuffer, updated, length);
+        }
+
+        if (!state->closing.load()) {
+            dbHandle = state->dbHandle;
+            eventBuffer = reinterpret_cast<ISC_UCHAR *>(state->eventBuffer);
+            bufferLength = state->bufferLength;
+        }
+    }
+
+    if (!state->closing.load() && callbackGeneration == state->generation.load() &&
+        dbHandle && *dbHandle != 0 && eventBuffer && bufferLength > 0) {
+        ISC_STATUS_ARRAY status = {};
+        ISC_LONG eventId = 0;
+        if (!isc_que_events(status, dbHandle, &eventId, bufferLength,
+                            eventBuffer,
+                            FirebirdEventCallback, state)) {
+            if (!state->closing.load() && callbackGeneration == state->generation.load()) {
+                std::lock_guard<std::mutex> lock(state->mutex);
+                state->eventId = eventId;
+                state->armed = true;
+            } else if (dbHandle && *dbHandle != 0) {
+                ISC_STATUS_ARRAY cancelStatus = {};
+                isc_cancel_events(cancelStatus, dbHandle, &eventId);
+            }
+        }
+    }
+
+    state->callbackDepth.fetch_sub(1);
+}
+
+static void CancelEventListening(FirebirdDbData *fbd) {
+    if (!fbd || !fbd->events) return;
+
+    auto *state = fbd->events;
+    state->closing.store(true);
+    state->generation.fetch_add(1);
+
+    ISC_LONG eventId = 0;
+    bool armed = false;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        eventId = state->eventId;
+        armed = state->armed;
+        state->armed = false;
+        state->eventId = 0;
+    }
+
+    if (armed && state->dbHandle && *state->dbHandle != 0) {
+        ISC_STATUS_ARRAY status = {};
+        isc_cancel_events(status, state->dbHandle, &eventId);
+    }
+
+    WaitForEventCallbacksToDrain(state);
+}
+
+static bool ArmEventListening(FirebirdDbData *fbd) {
+    if (!fbd || !fbd->db) return false;
+
+    auto *state = EnsureEventState(fbd);
+    if (!state) return false;
+
+    state->owner = fbd;
+    state->dbHandle = &fbd->db->dbHandle();
+
+    if (!fbd->db->isConnected()) {
+        fbd->db->setError(-200160, "Database is not connected");
+        return false;
+    }
+
+    CancelEventListening(fbd);
+    FreeEventBuffers(state);
+    state->pending.clear();
+    state->eventId = 0;
+    state->closing.store(false);
+
+    if (state->names.empty()) {
+        fbd->db->setError(0, "");
+        return true;
+    }
+
+    if (!BuildEventBlock(fbd->db, state)) {
+        FreeEventBuffers(state);
+        return false;
+    }
+
+    if (!state->eventBuffer || !state->resultBuffer || state->bufferLength == 0) {
+        fbd->db->setError(-200161, "Unable to allocate Firebird event buffers");
+        FreeEventBuffers(state);
+        return false;
+    }
+
+    std::memset(state->resultBuffer, 0, state->bufferLength);
+
+    ISC_STATUS_ARRAY status = {};
+    ISC_LONG eventId = 0;
+    if (isc_que_events(status, state->dbHandle, &eventId, state->bufferLength,
+                       reinterpret_cast<const ISC_UCHAR *>(state->eventBuffer),
+                       FirebirdEventCallback, state)) {
+        SetStatusError(fbd->db, status);
+        FreeEventBuffers(state);
+        state->eventId = 0;
+        return false;
+    }
+
+    state->eventId = eventId;
+    state->armed = true;
+    fbd->db->setError(0, "");
+    return true;
+}
+
+static void DisposeEventState(FirebirdDbData *fbd) {
+    if (!fbd || !fbd->events) return;
+
+    CancelEventListening(fbd);
+    FreeEventBuffers(fbd->events);
+    delete fbd->events;
+    fbd->events = nullptr;
 }
 
 struct InsertColumnBinding {
@@ -991,6 +1332,7 @@ static void BindParams(FBStatement *stmt, FBDatabase *db, REALarray params) {
 static void fbEngineClose(dbDatabase *dbData) {
     auto *fbd = (FirebirdDbData *)dbData;
     if (fbd) {
+        DisposeEventState(fbd);
         if (fbd->db) {
             fbd->db->disconnect();
             delete fbd->db;
@@ -1674,25 +2016,111 @@ static RBBoolean fbClassConnect(REALobject instance) {
         connStr = dbName;
     }
 
-    auto *fb = new FBDatabase();
-    if (!fb->connect(connStr, user, pass, charset, role, data->dialect,
-                     host, data->port, dbName, wireCrypt, authClientPlugins)) {
-        delete fb;
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return false;
+
+    DisposeEventState(fbd);
+
+    if (!fbd->db->connect(connStr, user, pass, charset, role, data->dialect,
+                          host, data->port, dbName, wireCrypt, authClientPlugins)) {
+        REALSetDBIsConnected((REALdbDatabase)instance, false);
         return false;
     }
 
-    auto *fbd = new FirebirdDbData;
-    fbd->db = fb;
     fbd->autoCommit = true;
-
-    // Wire our native database into this Database instance.
-    // Since FirebirdDatabase inherits from Database, the REALobject
-    // IS a REALdbDatabase — the cast is safe for Database subclasses.
-    REALdbDatabase realDb = (REALdbDatabase)instance;
-    REALConstructDBDatabase(realDb, (dbDatabase *)fbd, &sFirebirdEngine);
-    REALSetDBIsConnected(realDb, true);
+    REALSetDBIsConnected((REALdbDatabase)instance, true);
 
     return true;
+}
+
+static void fbClassListen(REALobject instance, REALstring name) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return;
+
+    const std::string eventName = TrimASCII(RealToStd(name));
+    if (eventName.empty()) {
+        fbd->db->setError(-200162, "Event name cannot be empty");
+        return;
+    }
+
+    auto *state = EnsureEventState(fbd);
+    if (!state) return;
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        if (std::find(state->names.begin(), state->names.end(), eventName) == state->names.end()) {
+            state->names.push_back(eventName);
+        }
+    }
+
+    ArmEventListening(fbd);
+}
+
+static void fbClassStopListening(REALobject instance, REALstring name) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return;
+
+    const std::string eventName = TrimASCII(RealToStd(name));
+    if (eventName.empty()) {
+        fbd->db->setError(-200165, "Event name cannot be empty");
+        return;
+    }
+
+    auto *state = EnsureEventState(fbd);
+    if (!state) return;
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        auto it = std::remove(state->names.begin(), state->names.end(), eventName);
+        state->names.erase(it, state->names.end());
+    }
+
+    ArmEventListening(fbd);
+}
+
+static void fbClassCheckForNotifications(REALobject instance) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return;
+
+    auto *state = fbd->events;
+    if (!state) {
+        fbd->db->setError(0, "");
+        return;
+    }
+
+    std::vector<FirebirdPendingNotification> pending;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        pending.swap(state->pending);
+    }
+
+    fbd->db->setError(0, "");
+
+    for (const auto &notification : pending) {
+        FireReceivedNotificationEvent(instance, notification.name, (RBInteger)notification.count);
+    }
+}
+
+static void fbClassNotify(REALobject instance, REALstring name) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return;
+
+    if (!fbd->db->isConnected()) {
+        fbd->db->setError(-200163, "Database is not connected");
+        return;
+    }
+
+    const std::string eventName = TrimASCII(RealToStd(name));
+    if (eventName.empty()) {
+        fbd->db->setError(-200164, "Event name cannot be empty");
+        return;
+    }
+
+    const std::string sql = "EXECUTE BLOCK AS BEGIN POST_EVENT '" + EscapeSqlLiteral(eventName) + "'; END";
+    const bool ok = fbd->db->executeImmediate(sql);
+    if (ok && fbd->autoCommit && fbd->db->hasActiveTransaction()) {
+        fbd->db->commit();
+    }
 }
 
 static REALstring fbClassServerVersion(REALobject instance) {

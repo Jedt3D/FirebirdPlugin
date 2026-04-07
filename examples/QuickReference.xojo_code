@@ -218,6 +218,14 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   Var secureConnectOk As Boolean = secureDb.Connect
   secureDb.Close
 
+  // Firebird event notifications
+  AddHandler db.ReceivedNotification, AddressOf HandleFirebirdNotification
+  db.Listen("RefreshAll")
+  db.Notify("RefreshAll")
+  db.CheckForNotifications
+  db.StopListening("RefreshAll")
+  RemoveHandler db.ReceivedNotification, AddressOf HandleFirebirdNotification
+
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
     db.Prepare("INSERT INTO audit_log (event_date, event_time, created_at, note, payload) VALUES (?, ?, ?, ?, ?)"))
@@ -250,6 +258,10 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
     Var tsTzText As String = rs.Column("v_ts_tz").StringValue
   End If
   rs.Close
+End Sub
+
+Sub HandleFirebirdNotification(sender As FirebirdDatabase, name As String, count As Integer)
+  System.DebugLog(name + " x" + count.ToString)
 End Sub
 
 

@@ -13,12 +13,15 @@
 #include "FirebirdDB.h"
 #include "rb_plugin.h"
 
+struct FirebirdEventState;
+
 // ---------------------------------------------------------------------------
 // Plugin-side database struct — stored inside the Xojo Database object
 // ---------------------------------------------------------------------------
 struct FirebirdDbData {
     FBDatabase *db;
     bool        autoCommit;     // when true, commit after each ExecuteSQL
+    FirebirdEventState *events;
 };
 
 // ---------------------------------------------------------------------------

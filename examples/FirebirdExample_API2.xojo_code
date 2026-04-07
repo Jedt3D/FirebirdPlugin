@@ -79,6 +79,52 @@ End Sub
 
 
 // ---------------------------------------------------------------------------
+// Example 1c: Firebird Event Notifications
+// ---------------------------------------------------------------------------
+
+Sub EventNotificationsExample()
+  Var listener As New FirebirdDatabase
+  listener.Host = "localhost"
+  listener.Port = 3050
+  listener.DatabaseName = "/var/firebird/data/myapp.fdb"
+  listener.UserName = "SYSDBA"
+  listener.Password = "masterkey"
+
+  Var sender As New FirebirdDatabase
+  sender.Host = listener.Host
+  sender.Port = listener.Port
+  sender.DatabaseName = listener.DatabaseName
+  sender.UserName = listener.UserName
+  sender.Password = listener.Password
+
+  Try
+    listener.Connect
+    sender.Connect
+
+    AddHandler listener.ReceivedNotification, AddressOf HandleFirebirdNotification
+
+    listener.Listen("RefreshAll")
+    sender.Notify("RefreshAll")
+
+    // Usually call this from a Timer on desktop projects
+    listener.CheckForNotifications
+
+    listener.StopListening("RefreshAll")
+    RemoveHandler listener.ReceivedNotification, AddressOf HandleFirebirdNotification
+
+    sender.Close
+    listener.Close
+  Catch err As DatabaseException
+    System.DebugLog("Event error: " + err.Message)
+  End Try
+End Sub
+
+Sub HandleFirebirdNotification(sender As FirebirdDatabase, name As String, count As Integer)
+  System.DebugLog("Firebird notification: " + name + " x" + count.ToString)
+End Sub
+
+
+// ---------------------------------------------------------------------------
 // Example 2: Embedded / Local Connection (no server needed)
 // ---------------------------------------------------------------------------
 
