@@ -39,7 +39,6 @@ It is also stronger than Xojo's built-in drivers in one important area: Firebird
 The main areas where it still trails the built-ins are:
 
 - no PostgreSQL-style certificate-path SSL/TLS surface
-- no implemented Firebird event API yet
 - no clean Firebird-native streaming BLOB class yet
 - no SQLite-style local-engine utilities such as `BackUp`, `CreateBlob`, `OpenBlob`, encryption, attached databases, or WAL controls
 - a thinner `RowSet` implementation than SQLite
@@ -172,18 +171,13 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 - `SSLKey`
 - `SSLCertificate`
 - `SSLAuthority`
-- `CheckForNotifications`
-- `Listen`
-- `Notify`
-- `StopListening`
 - `CreateLargeObject`
 - `OpenLargeObject`
 - `DeleteLargeObject`
-- `ReceivedNotification` event
 
 Technical impact:
 
-- PostgreSQL is ahead on async/event-style database integration
+- Firebird now matches PostgreSQL's practical notification workflow with `Listen`, `StopListening`, `Notify`, `CheckForNotifications`, and a shipped `ReceivedNotification` event, but it still does not match PostgreSQL's sender-id / payload semantics
 - PostgreSQL is ahead on native large-object tooling
 - PostgreSQL is still ahead on certificate-validation semantics and SSL material controls
 
@@ -275,7 +269,6 @@ Compared with MySQL and PostgreSQL, Firebird currently lacks:
 
 Compared with PostgreSQL and SQLite, Firebird currently lacks:
 
-- an implemented notification/event API
 - a clean Firebird-native streaming BLOB class
 - SQLite-style BLOB streaming objects
 - SQLite-style encryption and attached-database management
@@ -349,9 +342,9 @@ Ranking:
 
 Reason:
 
-- PostgreSQL has notifications and large objects
+- PostgreSQL still has richer notification payload semantics and large objects
 - SQLite has rich local-engine APIs
-- Firebird has strong admin APIs but fewer app-integration extras
+- Firebird now has strong admin APIs plus shipped event notifications, but still has fewer app-integration extras than PostgreSQL or SQLite
 
 ## 8. Bottom-Line Assessment
 
@@ -372,7 +365,6 @@ The Firebird plugin is already on par for:
 The Firebird plugin is still behind the built-ins in:
 
 - PostgreSQL-style certificate controls
-- PostgreSQL notifications in shipped form
 - PostgreSQL-style large-object ergonomics
 - SQLite backup/blob/encryption/attachment/WAL tooling
 - editable `RowSet` behavior
@@ -390,10 +382,9 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Implement a limited Firebird event API with `Listen`, `StopListening`, `CheckForNotifications`, and `Notify`
-2. Revisit a Firebird-native streaming BLOB handle only if stable blob-id ergonomics can be exposed cleanly
-3. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
-4. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
+1. Revisit a Firebird-native streaming BLOB handle only if stable blob-id ergonomics can be exposed cleanly
+2. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
+3. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
@@ -401,6 +392,7 @@ Phase 21 closes the forward-only `RowSet` navigation gap through buffered read n
 Phase 22 closes the narrow PostgreSQL-style `SSLMode` alias gap through an honest wrapper over `WireCrypt`.
 Phase 23 closes the PostgreSQL large-object parity investigation with a no-go decision on direct API mimicry.
 Phase 24 closes the event feasibility question with a go decision on limited Firebird-native notification support.
+Phase 25 closes that event gap with a shipped `Listen` / `StopListening` / `Notify` / `CheckForNotifications` surface and the `ReceivedNotification` event.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 

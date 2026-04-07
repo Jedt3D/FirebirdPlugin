@@ -230,7 +230,7 @@ The checklist below compares the current Xojo plugin to that surface.
 | Database info API | `isc_database_info` | `[x]` | Exposed to Xojo through typed database info helper methods |
 | Transaction info API | `isc_transaction_info` | `[x]` | Phase 03 added inspection helpers and Phase 04 added explicit TPB-backed transaction controls |
 | Request API / BLR style APIs | low-level request functions | `[ ]` | Not implemented and probably out of scope for Xojo v1 |
-| Event API | `isc_event_*` | `[ ]` | Not implemented |
+| Event API | `isc_event_*` | `[x]` | Phase 25 adds `Listen`, `StopListening`, `Notify`, `CheckForNotifications`, and `ReceivedNotification` |
 | Security/user management core API | security-related APIs | `[-]` | Connection security properties (`WireCrypt`, `AuthClientPlugins`, `SSLMode`) and service-manager user operations are implemented; broader security surface is still open |
 | Services API | backup, restore, statistics, validation, user management, trace, etc. | `[-]` | Phase 17 extends the first slice to backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output |
 | Type conversions for text and date/time | helper functions and driver mapping | `[x]` | Current plugin maps common legacy types to Xojo values |
@@ -270,6 +270,7 @@ This table tracks implementation progress against the plan through the currently
 | 22 | limited `SSLMode` alias over `WireCrypt` | Complete | `175 passed, 0 failed` | `feature/phase-22` | `9179762` | `phase_22_article.md` |
 | 23 | PostgreSQL large-object parity investigation | Complete | `n/a (design slice)` | `feature/phase-23` | `64f1126` | `phase_23_article.md` |
 | 24 | Firebird event / notification feasibility investigation | Complete | `n/a (design slice)` | `feature/phase-24` | `a3d3945` | `phase_24_article.md` |
+| 25 | Firebird-native event / notification API slice | Complete | `180 passed, 0 failed` | `feature/phase-25` | `84dd23f` | `phase_25_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -290,6 +291,7 @@ This table tracks implementation progress against the plan through the currently
 - schema helpers: tables, columns, indexes
 - database info helpers backed by `isc_database_info`
 - Firebird-native connection-security properties: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
+- Firebird-native event notifications: `Listen`, `StopListening`, `Notify`, `CheckForNotifications`, `ReceivedNotification`
 - Services API first slice for backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
 - Firebird 4/5/6 modern type mapping: `INT128`, `DECFLOAT`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE` via string semantics
@@ -440,6 +442,7 @@ Current suite entry points:
 - `TestRecoverLimboTransactions`
 - `TestSetSweepInterval`
 - `TestShutdownOnlineControl`
+- `TestEventNotifications`
 - `TestDisplayUsers`
 - `TestAddDeleteUser`
 - `TestChangeUserPassword`
@@ -499,6 +502,7 @@ Current suite entry points:
 | `TestRecoverLimboTransactions` | targeted limbo-recovery calls with safe clean-database verification | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestSetSweepInterval` | reversible database sweep-interval property update with `MON$DATABASE` readback | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestShutdownOnlineControl` | denied-new-attachments shutdown and online restoration using a separate service-control object | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
+| `TestEventNotifications` | event listen, post, queue-drain dispatch, and stop-listening behavior | Event API | `isc_event_block`, `isc_que_events`, `isc_event_counts`, `isc_cancel_events`, `POST_EVENT` |
 | `TestDisplayUsers` | read-only user display and output capture | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestAddDeleteUser` | add-user and delete-user mutation with display-based readback | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestChangeUserPassword` | password mutation with old/new credential verification | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach`, `isc_attach_database` |
@@ -573,12 +577,13 @@ Status: completed on April 6, 2026.
 | affected-row reporting | Xojo built-in driver expectations | Complete in Phase 18 through `AffectedRowCount` on non-query execution paths | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 17 completes the first backup/restore/statistics/validation/sweep/limbo-list/limbo-recovery/sweep-interval/shutdown-online/user-display/add-delete-password-admin-profile/output slice | In progress by slices |
 | Event API wrapper | Jaybird event APIs | Missing | Medium |
+| Firebird-native event API slice | Jaybird event APIs, Firebird `POST_EVENT` docs | Complete in Phase 25 through queued callback dispatch and `CheckForNotifications()` | Done |
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 24
+## Progress Summary Through Phase 25
 
-Planned through Phase 24 and now complete:
+Planned through Phase 25 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
@@ -586,6 +591,7 @@ Planned through Phase 24 and now complete:
 - limited `SSLMode` alias over `WireCrypt`
 - PostgreSQL large-object parity investigation and design decision
 - Firebird event / notification feasibility investigation and go decision
+- shipped Firebird-native event API through queued callback dispatch and `CheckForNotifications()`
 - buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -610,11 +616,10 @@ Planned through Phase 24 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 24:
+Still outside completed scope after Phase 25:
 
 - PostgreSQL-style certificate-path properties
 - Firebird-native streaming BLOB surface
-- shipped Firebird event API
 - broader user-management workflows
 - broader maintenance/repair services
 - array API
@@ -630,8 +635,8 @@ Still outside completed scope after Phase 24:
 
 ### Do next
 
-- implement a limited Firebird event API
 - revisit a Firebird-native streaming BLOB API only if blob-id ergonomics can be exposed cleanly
+- keep the shipped event API stable and extend it only if real-world demand appears
 - revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 - revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
 
