@@ -47,7 +47,8 @@
 #define isc_encode_timestamp ptr_isc_encode_timestamp
 #endif
 
-#if __has_include(<firebird/fb_c_api.h>) && !(defined(_WIN64) && defined(__aarch64__))
+// Modern Firebird C++ API not available on Windows (requires fb_c_api.h)
+#if __has_include(<firebird/fb_c_api.h>) && !defined(_WIN32) && !defined(_WIN64)
 #define FB_HAS_MODERN_API 1
 #else
 #define FB_HAS_MODERN_API 0
