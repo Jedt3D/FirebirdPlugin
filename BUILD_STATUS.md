@@ -1,113 +1,172 @@
-# Windows Build Status - All Architectures
-
-## ✅ All Builds Successful (Cross-Compilation from ARM64)
+# Windows Build Status - Current Status
 
 **Last Updated**: 2026-04-07
-**Build Host**: Windows ARM64
-**Status**: ✅ Production-ready
+**Status**: ✅ **Production Ready for Win32/x64**
 
-### Build Matrix
+## ✅ Production Builds (Main Branch)
 
-| Architecture | Status | Firebird Version | Build Directory | Notes |
-|-------------|--------|------------------|-----------------|-------|
-| **Win32** | ✅ Working | Firebird 5.0.3 | `build_win32_fb5/` | Cross-compiled from ARM64 → x86 |
-| **x64** | ✅ Working | Firebird 5.0.3 | `build_x64_fb5/` | Cross-compiled from ARM64 → x64 |
-| **ARM64** | ✅ Working | Firebird 6.0 | `build_win_arm64/` | Native ARM64 with dynamic loading |
+### Windows Win32 (x86) & x64
+**Status**: ✅ **Production Ready**
+**Firebird Version**: 5.0.3
+**Branch**: `main`
 
-## 🔧 Key Fixes Applied
+| Architecture | Build Directory | DLL Size | Status | Firebird |
+|-------------|-----------------|----------|---------|----------|
+| **Win32** | `build_win32_fb5/` | 286 KB | ✅ Production | Firebird 5.0.3 x86 |
+| **x64** | `build_x64_fb5/` | 349 KB | ✅ Production | Firebird 5.0.3 x64 |
 
-### 1. Architecture-Specific Compilation (Fixed 2026-04-07)
-**Problem**: Function pointer redirection was incorrectly applied to all 64-bit Windows builds
-**Solution**: Changed conditional compilation to target ARM64 only
+### Build Details
+- **Host**: Windows ARM64 (cross-compilation)
+- **Compiler**: MSVC 19.50.35728.0 (Visual Studio 2025)
+- **Build System**: CMake + Visual Studio 2025
+- **All Features**: Complete feature parity with macOS ARM64 version
 
-```cpp
-// Before (broken for x64)
-#ifdef _WIN64
-#define isc_attach_database ptr_isc_attach_database
-// ...
+### Quick Build Commands
+```powershell
+# Win32
+cmake -B build_win32_fb5 -G "Visual Studio 18 2026" -A Win32 `
+  -DFIREBIRD_ROOT="C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x86-withDebugSymbols"
+cmake --build build_win32_fb5 --config Release
 
-// After (correct)
-#if defined(_WIN64) && defined(__aarch64__)
-#define isc_attach_database ptr_isc_attach_database
-// ...
+# x64
+cmake -B build_x64_fb5 -G "Visual Studio 18 2026" -A x64 `
+  -DFIREBIRD_ROOT="C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols"
+cmake --build build_x64_fb5 --config Release
 ```
 
-**Files Modified**:
-- `sources/FirebirdDB.cpp`
-- `sources/FirebirdPlugin.cpp`
+## 🔬 Experimental ARM64 (Feature Branch)
 
-### 2. ARM64 Dynamic Loading
-ARM64 builds use dynamic loading to work with Firebird 6 (no native ARM64 client for FB5):
-- Runtime loading of `fbclient.dll`
-- Function pointer indirection for all Firebird API calls
-- Allows ARM64 plugin to work with Firebird 6 ARM64 client
+### Windows ARM64
+**Status**: 🔬 **Experimental - In Development**
+**Firebird Version**: 6.0 (Beta)
+**Branch**: `feature/firebird6-arm64`
+
+**Technical Challenges**:
+- Requires Firebird 6.0 modern C++ API integration
+- Complex Windows header compatibility issues
+- Different API structure than macOS/Linux
+- **Not production ready** - needs development work
+
+### For ARM64 Development
+```bash
+# Switch to experimental branch
+git checkout feature/firebird6-arm64
+
+# Work on Firebird 6.0 integration
+# Branch is ready for community contribution
+```
+
+## 🔧 Key Technical Decisions
+
+### Why Firebird 5.0.3 for Win32/x64?
+1. **Stability**: Mature, well-tested release
+2. **Consistency**: Single API across both architectures
+3. **Availability**: Full support for both x86 and x64
+4. **Compatibility**: Works with existing Windows infrastructure
+
+### Why Firebird 6.0 for ARM64?
+1. **Requirement**: No ARM64 build of Firebird 5.x
+2. **Modern API**: New features and improvements
+3. **Future-proof**: Aligns with ARM64 Windows ecosystem
 
 ## 📦 Build Outputs
 
-All builds produce:
-- `FirebirdPlugin.dll` - Native plugin binary
-- `FirebirdPlugin.xojo_plugin` - Xojo plugin package
-- `.lib` and `.exp` files for debugging
-
-### File Sizes
-- **Win32**: 286 KB (smallest - 32-bit)
-- **x64**: 349 KB (64-bit)
-- **ARM64**: ~350 KB (64-bit)
-
-## 🚀 Cross-Compilation Details
-
-### Build Environment
+### Main Branch (Production)
 ```
-Host: Windows ARM64
-Compiler: MSVC 19.50.35728.0 (Visual Studio 2025)
-Cross-compilers:
-  - Hostarm64/x86/cl.exe  → Win32 builds
-  - Hostarm64/x64/cl.exe  → x64 builds
-  - Hostarm64/arm64/cl.exe → ARM64 builds
+build_win32_fb5/
+├── Release/
+│   └── FirebirdPlugin.dll           # 286 KB, PE32 i386
+└── FirebirdPlugin.xojo_plugin        # Xojo package
+
+build_x64_fb5/
+├── Release/
+│   └── FirebirdPlugin.dll           # 349 KB, PE32+ x64
+└── FirebirdPlugin.xojo_plugin        # Xojo package
 ```
 
-### Firebird Client Locations
+## 🎯 Platform Coverage
+
+### ✅ Currently Supported
+- ✅ **Windows Win32** (x86) - Firebird 5.0.3
+- ✅ **Windows x64** - Firebird 5.0.3
+- ✅ **macOS ARM64** - Firebird 6.0 (from feature branches)
+
+### 🔬 In Development
+- 🔬 **Windows ARM64** - Firebird 6.0 (feature branch)
+
+### ❌ Not Supported
+- ❌ **Windows ARM64 on main branch** (requires feature branch)
+
+## 🚀 Deployment
+
+### For Win32/x64 Users (Main Branch)
+1. Use `FirebirdPlugin.xojo_plugin` from `build_win32_fb5/` or `build_x64_fb5/`
+2. Install matching Firebird 5.0.3 client (x86 for Win32, x64 for x64)
+3. Ready for production use
+
+### For ARM64 Users
+1. **Option 1**: Use x64 plugin on ARM64 Windows (via WOW64 emulation)
+2. **Option 2**: Use macOS ARM64 build if developing on Mac
+3. **Option 3**: Contribute to `feature/firebird6-arm64` branch
+
+## 📊 Cross-Compilation Success
+
+**Achievement**: Successful cross-compilation from ARM64 host to x86/x64 targets
+
+```
+ARM64 Host → Win32 (x86)  ✅ Working
+ARM64 Host → x64          ✅ Working
+ARM64 Host → ARM64        🔬 Experimental
+```
+
+## 🛠️ Development Workflow
+
+### Production Development (Main Branch)
 ```bash
-Win32: C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x86-withDebugSymbols
-x64:   C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols
-ARM64: C:/Program Files/Firebird/Firebird_6_0 (runtime loaded)
+git checkout main
+# Focus on Win32/x64 stability and features
+# Ready for production releases
 ```
 
-## 🔨 Building
-
-### Quick Build (All Architectures)
+### ARM64 Development (Feature Branch)
 ```bash
-# Win32
-mkdir build_win32_fb5 && cd build_win32_fb5
-cmake -G "Visual Studio 18 2026" -A Win32 -DFIREBIRD_ROOT="C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x86-withDebugSymbols" ..
-cmake --build . --config Release
-
-# x64
-mkdir build_x64_fb5 && cd build_x64_fb5
-cmake -G "Visual Studio 18 2026" -A x64 -DFIREBIRD_ROOT="C:/Users/worajedt/Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols" ..
-cmake --build . --config Release
-
-# ARM64 (uses system Firebird 6)
-mkdir build_win_arm64 && cd build_win_arm64
-cmake -G "Visual Studio 18 2026" -A ARM64 ..
-cmake --build . --config Release
+git checkout feature/firebird6-arm64
+# Work on Firebird 6.0 integration
+# Experimental features welcome
 ```
 
-## 📋 Runtime Requirements
+## 📝 Recent Changes
 
-End-users need matching Firebird client:
-- **Win32 plugin** → Firebird 5.0.3 x86 client
-- **x64 plugin** → Firebird 5.0.3 x64 client
-- **ARM64 plugin** → Firebird 6.0 ARM64 client
+### 2026-04-07: Major Restructuring
+- ✅ **Fixed Win32/x64 builds** with Firebird 5.0.3
+- ✅ **Disabled modern C++ API** for Windows compatibility
+- ✅ **Created dedicated ARM64 branch** for Firebird 6.0 work
+- ✅ **Cross-compilation working** from ARM64 host
+- ✅ **All new features integrated** from macOS version
 
-## ✅ What's Working
+### Technical Fixes Applied
+1. **API Compatibility**: Disabled modern Firebird C++ API for Windows builds
+2. **Calling Convention**: Fixed event callback signatures for Win32
+3. **Build System**: Configured CMake for architecture-specific Firebird versions
 
-- ✅ **Cross-compilation**: ARM64 host builds all Windows targets
-- ✅ **API compatibility**: Using Firebird C API (ibase.h) consistently
-- ✅ **Dynamic loading**: ARM64 works around architecture limitations
-- ✅ **Build automation**: CMake handles all architectures
-- ✅ **Plugin packaging**: All .xojo_plugin packages generated correctly
+## 🎯 Roadmap
 
-## 🎯 Production Ready
+### Current Status (Main Branch)
+- ✅ Win32 + x64 with Firebird 5.0.3: **Production Ready**
+- 🔄 Maintenance and bug fixes for production builds
 
-All three Windows architectures are production-ready and can be distributed to Xojo users!
+### ARM64 Support (Feature Branch)
+- 🔬 Firebird 6.0 modern C++ API integration
+- 🔬 Windows ARM64 build compatibility
+- 🔬 Community contributions welcome
+
+## 📞 Resources
+
+- [Main Branch Documentation](README.md)
+- [Feature Branch: firebird6-arm64](https://github.com/Jedt3D/FirebirdPlugin/tree/feature/firebird6-arm64)
+- [Firebird 5.0.3 Release](https://firebirdsql.org/en/firebird-5-0/)
+- [Firebird 6.0 Beta](https://firebirdsql.org/en/firebird-6-0/)
+
+---
+
+**Summary**: Windows Win32 and x64 builds are production-ready with Firebird 5.0.3. ARM64 support is under active development on the `feature/firebird6-arm64` branch.

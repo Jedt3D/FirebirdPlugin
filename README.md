@@ -28,7 +28,8 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`, `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN, plus Firebird 4/5/6 modern types via `StringValue`
 - Supports **remote** (client/server) and **embedded** (direct file) connections
-- Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64, arm64), **Linux** (x64)
+- Cross-platform: **macOS** (arm64, x86_64), **Windows** (Win32, x64), **Linux** (x64)
+  - **Note**: Windows ARM64 support is under development - see [BUILD_STATUS.md](BUILD_STATUS.md)
 
 ## Quick Example (Xojo API 2.0)
 
@@ -614,7 +615,7 @@ The `sdk/` directory includes the required Plugin SDK headers and glue code from
 
 - **CMake** 3.20+ (cross-platform builds)
 - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-- **Windows**: Visual Studio 2022 or later with C++ workload (for ARM64: add "MSVC ARM64 build tools" in VS Installer)
+- **Windows**: Visual Studio 2022 or later with C++ workload (for ARM64 development: requires "MSVC ARM64 build tools" + Firebird 6.0)
 - **Linux**: GCC/G++ and standard build tools (`build-essential`)
 
 ## Building
@@ -627,23 +628,26 @@ The easiest way to build on Windows. The script auto-detects VS2022, downloads F
 # Build for x64 (default) — downloads Firebird automatically
 .\build-windows.ps1
 
-# Build for ARM64
-.\build-windows.ps1 -Arch arm64
+# Build for ARM64 (requires feature branch - see BUILD_WINDOWS_ARM64.md)
+# .\build-windows.ps1 -Arch arm64
 
-# Quick ARM64 build (assumes Firebird 6.0+ installed)
-.\build-quick.ps1
+# Build for Win32 (x86) - Production Ready
+.\build-windows.ps1 -Arch Win32
+
+# Build for x64 - Production Ready
+.\build-windows.ps1 -Arch x64
 
 # Clean rebuild
 .\build-windows.ps1 -Clean
 
 # Use an existing Firebird installation
-.\build-windows.ps1 -FirebirdRoot "C:\Program Files\Firebird\Firebird_6_0"
+.\build-windows.ps1 -FirebirdRoot "C:\Users\worajedt\Firebird-5.0.3.1683-0-windows-x64-withDebugSymbols"
 
 # Skip download (reuse previous)
 .\build-windows.ps1 -SkipFirebird
 ```
 
-> **ARM64 note**: See [BUILD_WINDOWS_ARM64.md](BUILD_WINDOWS_ARM64.md) for detailed ARM64 build instructions. The plugin builds as native ARM64, using the x64 Firebird client under emulation.
+> **⚠️ Platform Status**: Windows ARM64 support is experimental. See [BUILD_STATUS.md](BUILD_STATUS.md) for current platform support. Use Win32/x64 builds for production deployments.
 
 ### macOS (Makefile — quick local build)
 
