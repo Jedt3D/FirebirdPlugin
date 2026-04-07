@@ -10,6 +10,7 @@ Phase 22 closes the narrow `SSLMode` alias gap through an honest wrapper over `W
 Phase 23 closes the PostgreSQL large-object parity investigation with a no-go decision on direct API mimicry.
 Phase 24 closes the event feasibility question with a go decision on limited Firebird-native notification support.
 Phase 25 closes that event implementation slice with a shipped Firebird-native notification API.
+Phase 26 closes the Firebird-native blob foundation slice through `FirebirdBlob`, `CreateBlob`, `OpenBlob`, and `BindBlob`.
 
 ## Goal
 
@@ -35,7 +36,7 @@ The Firebird plugin is already strong in:
 The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md) are:
 
 - PostgreSQL-style certificate controls
-- Firebird-native streaming BLOB support with clean Xojo ergonomics
+- PostgreSQL-style large-object lifecycle semantics only if they create real value beyond the shipped Firebird-native blob surface
 - editable `RowSet` behavior only if it creates a real Xojo-visible gain
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
@@ -46,6 +47,7 @@ Phase 22 closes the narrow `SSLMode` alias slice over `WireCrypt`.
 Phase 23 closes the large-object parity investigation and recommends against direct PostgreSQL-style naming.
 Phase 24 closes the event feasibility investigation and recommends implementing a limited event API next.
 Phase 25 closes that implementation and removes notification support from the primary parity gap list.
+Phase 26 closes the Firebird-native blob foundation slice and removes streaming BLOB support from the primary parity gap list.
 
 ## Decision Update From User Direction
 
@@ -188,35 +190,31 @@ Recommendation:
 
 ### 5. Dedicated Firebird BLOB object
 
-Priority: Low to medium  
+Status: Complete in Phase 26  
 Difficulty: Medium  
 Risk: Medium  
-Recommended order: Fifth
+Result: Shipped as a Firebird-native blob surface, not a PostgreSQL lifecycle clone
 
-Why:
+Phase 26 ships:
 
-- the plugin already supports explicit text and binary BLOB bind/read behavior
-- this only becomes high-value if users need streaming or partial BLOB access
-- otherwise it adds API surface without improving the built-in-driver feel much
+- `CreateBlob() As FirebirdBlob`
+- `OpenBlob(rowset As RowSet, column As String) As FirebirdBlob`
+- `BindBlob(index As Integer, value As FirebirdBlob)`
+- `FirebirdBlob.Read`
+- `FirebirdBlob.Write`
+- `FirebirdBlob.Seek`
+- `FirebirdBlob.Close`
 
-How PostgreSQL does it:
+Why this shape is correct:
 
-- it exposes large-object lifecycle calls on the database object
-- it uses a dedicated object for operations like:
-  - `Read`
-  - `Write`
-  - `Seek`
-  - `Tell`
+- Firebird blob locators are transaction-bound
+- PostgreSQL large-object lifecycle names would have been misleading
+- Xojo still gets a practical streaming object for real BLOB workflows
 
-Recommended parity target:
+What remains outside scope:
 
-- if Firebird can support a clean streaming object, follow the PostgreSQL pattern rather than inventing a one-off helper API
-- if Firebird cannot support that pattern cleanly, keep the current direct bind/read support and defer the object model
-
-Recommendation:
-
-- defer until there is clear evidence that streaming BLOB workflows are common
-- do not implement PostgreSQL-style lifecycle names unless the semantics can be made honest
+- direct PostgreSQL-style `CreateLargeObject` / `OpenLargeObject` / `DeleteLargeObject` naming
+- a fake global blob-id lifecycle detached from rowset/transaction context
 
 ## Priority 3: Firebird Distinctive Value
 
@@ -235,8 +233,8 @@ This is the right long-term differentiator because Xojo's built-in drivers do no
 If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is now:
 
 1. improve `RowSet` capability where it creates a real PostgreSQL-visible parity gain
-2. revisit a Firebird-native streaming BLOB handle only if blob-id ergonomics can be exposed cleanly
-3. revisit editable `RowSet` behavior only if it creates a real PostgreSQL-visible gain
+2. revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
+3. revisit PostgreSQL-style large-object lifecycle semantics only if the shipped Firebird-native blob surface proves insufficient in real projects
 4. then return to deeper Firebird-specific service/admin expansion
 
 ## What Not to Prioritize for Built-in Parity
@@ -271,7 +269,7 @@ Expected value:
 
 ### Wave 2: Structural parity work
 
-- implement a dedicated Firebird-native streaming BLOB surface only if blob-id ergonomics are clean and the use case is real
+- ship a dedicated Firebird-native streaming BLOB surface
 - keep the shipped notification surface stable and documented
 
 Expected value:
@@ -334,6 +332,7 @@ Using `PostgreSQLDatabase` as the gold standard implies these practical targets:
 - Firebird security parity is partially complete in Phase 20 through `WireCrypt` and `AuthClientPlugins`
 - the narrow `SSLMode` alias is complete in Phase 22, but certificate-path properties are not yet justified by the official Firebird connection model
 - large-object parity investigation in Phase 23 concluded that direct PostgreSQL naming is not a clean fit for Firebird
+- Firebird-native blob streaming is now shipped in Phase 26 through `FirebirdBlob`, `CreateBlob`, `OpenBlob`, and `BindBlob`
 - limited Firebird-native event support is now shipped in Phase 25
 - if streaming support is added later, it should be Firebird-native and explicit about transaction-bound semantics
 - the shipped event pattern is:
@@ -353,8 +352,8 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. revisit a Firebird-native streaming BLOB handle only if a practical blob-id story is defined
-2. revisit editable `RowSet` behavior only if a strong Xojo use case appears
+1. revisit editable `RowSet` behavior only if a strong Xojo use case appears
+2. revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 3. then continue expanding Firebird's distinctive admin/service strengths
 
 Why this is best:
@@ -368,11 +367,11 @@ Why this is best:
 
 Default recommended next step:
 
-- revisit a Firebird-native streaming BLOB handle only if blob-id ergonomics can be exposed cleanly
+- revisit editable `RowSet` behavior only if a strong Xojo use case appears
 
 Default recommended second step:
 
-- revisit editable `RowSet` behavior only if a strong Xojo use case appears
+- revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 
 Default recommended third step:
 

@@ -271,6 +271,7 @@ This table tracks implementation progress against the plan through the currently
 | 23 | PostgreSQL large-object parity investigation | Complete | `n/a (design slice)` | `feature/phase-23` | `64f1126` | `phase_23_article.md` |
 | 24 | Firebird event / notification feasibility investigation | Complete | `n/a (design slice)` | `feature/phase-24` | `a3d3945` | `phase_24_article.md` |
 | 25 | Firebird-native event / notification API slice | Complete | `180 passed, 0 failed` | `feature/phase-25` | `84dd23f` | `phase_25_article.md` |
+| 26 | Firebird-native blob foundation slice | Complete | `190 passed, 0 failed` | `feature/phase-26` | `75ad2e8` | `phase_26_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -292,6 +293,7 @@ This table tracks implementation progress against the plan through the currently
 - database info helpers backed by `isc_database_info`
 - Firebird-native connection-security properties: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Firebird-native event notifications: `Listen`, `StopListening`, `Notify`, `CheckForNotifications`, `ReceivedNotification`
+- Firebird-native blob foundation: `CreateBlob`, `OpenBlob`, `BindBlob`, `FirebirdBlob`
 - Services API first slice for backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output
 - common legacy type mapping: integer, bigint, float/double, numeric/decimal, varchar/char, blob, date, time, timestamp, boolean
 - Firebird 4/5/6 modern type mapping: `INT128`, `DECFLOAT`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE` via string semantics
@@ -306,7 +308,6 @@ This table tracks implementation progress against the plan through the currently
 ### Missing compared to the broader Firebird SDK
 
 - broader Services API beyond backup/restore/statistics/validation/sweep/limbo-list/limbo-recovery/sweep-interval/shutdown-online/user-display and the current user-mutation slice
-- Events API
 - Array API
 - modern interface-based API
 - broader transaction management APIs beyond current inspection helpers
@@ -330,6 +331,7 @@ This is the intended feature set for the Xojo plugin within the current scope.
 - explicit transaction options backed by Firebird TPB
 - schema helpers for tables, columns, and indexes
 - database info helpers backed by `isc_database_info`
+- Firebird-native blob foundation through `CreateBlob`, `OpenBlob`, `BindBlob`, and `FirebirdBlob`
 - Services API first slice for backup, restore, database statistics, online validation, sweep, limbo-transaction listing, limbo recovery, sweep-interval control, shutdown/online control, user display, add/delete/password-change, admin-flag mutation, name mutation, and verbose service output
 
 ### Type support
@@ -358,7 +360,6 @@ This is the intended feature set for the Xojo plugin within the current scope.
 ### Deferred features
 
 - broader Services API beyond backup/restore/statistics/validation/sweep/limbo-list/limbo-recovery/sweep-interval/shutdown-online/user-display and the current user-mutation slice
-- Events API
 - Array API
 - BLR/request-style APIs
 
@@ -443,6 +444,7 @@ Current suite entry points:
 - `TestSetSweepInterval`
 - `TestShutdownOnlineControl`
 - `TestEventNotifications`
+- `TestBlobStreaming`
 - `TestDisplayUsers`
 - `TestAddDeleteUser`
 - `TestChangeUserPassword`
@@ -503,6 +505,7 @@ Current suite entry points:
 | `TestSetSweepInterval` | reversible database sweep-interval property update with `MON$DATABASE` readback | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestShutdownOnlineControl` | denied-new-attachments shutdown and online restoration using a separate service-control object | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestEventNotifications` | event listen, post, queue-drain dispatch, and stop-listening behavior | Event API | `isc_event_block`, `isc_que_events`, `isc_event_counts`, `isc_cancel_events`, `POST_EVENT` |
+| `TestBlobStreaming` | Firebird-native blob creation, streaming write, prepared bind, reopen, read, and deterministic seek behavior | Blob functions, statement execution | `isc_create_blob2`, `isc_put_segment`, `isc_open_blob2`, `isc_get_segment` |
 | `TestDisplayUsers` | read-only user display and output capture | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestAddDeleteUser` | add-user and delete-user mutation with display-based readback | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach` |
 | `TestChangeUserPassword` | password mutation with old/new credential verification | Services API | `isc_service_attach`, `isc_service_start`, `isc_service_query`, `isc_service_detach`, `isc_attach_database` |
@@ -566,7 +569,7 @@ Status: completed on April 6, 2026.
 | Type-aware string binding for modern types | Jaybird, .NET, Python | Complete | Converts textual Xojo input into Firebird wire structs using utility interfaces |
 | Modern-type desktop coverage | Jaybird, .NET | Complete | Round-trip tests added for all in-scope Firebird 4/5/6 types |
 
-### Phases 3-18: Expand toward broader Firebird SDK surface
+### Phases 3-26: Expand toward broader Firebird SDK surface
 
 | Feature | Primary upstream inspiration | Current state | Priority |
 | --- | --- | --- | --- |
@@ -576,14 +579,13 @@ Status: completed on April 6, 2026.
 | generated-key / `AddRow` convenience | Jaybird, Xojo database API | Complete in Phase 05 through native `AddRow` callbacks | Done |
 | affected-row reporting | Xojo built-in driver expectations | Complete in Phase 18 through `AffectedRowCount` on non-query execution paths | Done |
 | Services API wrapper | Jaybird ServiceManager, .NET docs | Phase 17 completes the first backup/restore/statistics/validation/sweep/limbo-list/limbo-recovery/sweep-interval/shutdown-online/user-display/add-delete-password-admin-profile/output slice | In progress by slices |
-| Event API wrapper | Jaybird event APIs | Missing | Medium |
-| Firebird-native event API slice | Jaybird event APIs, Firebird `POST_EVENT` docs | Complete in Phase 25 through queued callback dispatch and `CheckForNotifications()` | Done |
+| Event API wrapper | Jaybird event APIs, Firebird `POST_EVENT` docs | Complete in Phase 25 through queued callback dispatch and `CheckForNotifications()` | Done |
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 25
+## Progress Summary Through Phase 26
 
-Planned through Phase 25 and now complete:
+Planned through Phase 26 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
@@ -592,6 +594,7 @@ Planned through Phase 25 and now complete:
 - PostgreSQL large-object parity investigation and design decision
 - Firebird event / notification feasibility investigation and go decision
 - shipped Firebird-native event API through queued callback dispatch and `CheckForNotifications()`
+- shipped Firebird-native blob foundation through `CreateBlob`, `OpenBlob`, `BindBlob`, and `FirebirdBlob`
 - buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -616,10 +619,10 @@ Planned through Phase 25 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 25:
+Still outside completed scope after Phase 26:
 
 - PostgreSQL-style certificate-path properties
-- Firebird-native streaming BLOB surface
+- PostgreSQL-style large-object lifecycle semantics
 - broader user-management workflows
 - broader maintenance/repair services
 - array API
@@ -635,15 +638,14 @@ Still outside completed scope after Phase 25:
 
 ### Do next
 
-- revisit a Firebird-native streaming BLOB API only if blob-id ergonomics can be exposed cleanly
 - keep the shipped event API stable and extend it only if real-world demand appears
+- keep the shipped blob API stable and extend it only if real-world streaming workloads demand more than the current Firebird-native surface
 - revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 - revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
 
 ### Defer until after the above
 
 - broader Services API
-- Event API
 - Array API
 - interface-based API rewrite
 

@@ -39,8 +39,8 @@ It is also stronger than Xojo's built-in drivers in one important area: Firebird
 The main areas where it still trails the built-ins are:
 
 - no PostgreSQL-style certificate-path SSL/TLS surface
-- no clean Firebird-native streaming BLOB class yet
-- no SQLite-style local-engine utilities such as `BackUp`, `CreateBlob`, `OpenBlob`, encryption, attached databases, or WAL controls
+- no PostgreSQL-style large-object lifecycle semantics
+- no SQLite-style local-engine utilities such as `BackUp`, encryption, attached databases, or WAL controls
 - a thinner `RowSet` implementation than SQLite
 
 ## 1. Common Xojo `Database` API Parity
@@ -138,6 +138,17 @@ These methods are not part of the standard Xojo `Database` API and represent plu
 - `SetUserAdmin(...)`
 - `UpdateUserNames(...)`
 - `DeleteUser(...)`
+- `CreateBlob() As FirebirdBlob`
+- `OpenBlob(rowset As RowSet, column As String) As FirebirdBlob`
+- `BindBlob(index As Integer, value As FirebirdBlob)`
+- `FirebirdBlob.BlobId() As String`
+- `FirebirdBlob.Length() As Int64`
+- `FirebirdBlob.Position() As Int64`
+- `FirebirdBlob.IsOpen() As Boolean`
+- `FirebirdBlob.Read(count As Integer) As MemoryBlock`
+- `FirebirdBlob.Write(value As MemoryBlock) As Boolean`
+- `FirebirdBlob.Seek(offset As Int64, whence As Integer) As Int64`
+- `FirebirdBlob.Close() As Boolean`
 - `LastServiceOutput() As String`
 
 This is the single biggest area where the Firebird plugin is ahead of Xojo's built-in drivers.
@@ -178,7 +189,7 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 Technical impact:
 
 - Firebird now matches PostgreSQL's practical notification workflow with `Listen`, `StopListening`, `Notify`, `CheckForNotifications`, and a shipped `ReceivedNotification` event, but it still does not match PostgreSQL's sender-id / payload semantics
-- PostgreSQL is ahead on native large-object tooling
+- Firebird now has a real streaming blob object through `FirebirdBlob`, `CreateBlob`, `OpenBlob`, and `BindBlob`, but PostgreSQL is still ahead on exact large-object lifecycle semantics
 - PostgreSQL is still ahead on certificate-validation semantics and SSL material controls
 
 ### SQLiteDatabase
@@ -188,8 +199,6 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 - `DatabaseFile`
 - in-memory constructor behavior
 - `BackUp`
-- `CreateBlob`
-- `OpenBlob`
 - `AddDatabase`
 - `RemoveDatabase`
 - `EncryptionKey`
@@ -204,7 +213,7 @@ Public features in the Xojo docs that the Firebird plugin does not currently mir
 Technical impact:
 
 - SQLite is much stronger as an embedded/local-engine toolkit
-- SQLite has direct BLOB streaming objects
+- Firebird now matches the `CreateBlob` / `OpenBlob` method names, but SQLite is still stronger on local-engine tuning and deployment ergonomics
 - SQLite has richer engine-tuning features exposed at the Xojo level
 - SQLite has stronger local deployment ergonomics than Firebird
 
@@ -269,8 +278,7 @@ Compared with MySQL and PostgreSQL, Firebird currently lacks:
 
 Compared with PostgreSQL and SQLite, Firebird currently lacks:
 
-- a clean Firebird-native streaming BLOB class
-- SQLite-style BLOB streaming objects
+- PostgreSQL-style large-object lifecycle semantics
 - SQLite-style encryption and attached-database management
 
 ### C. `RowSet` richness
@@ -365,8 +373,8 @@ The Firebird plugin is already on par for:
 The Firebird plugin is still behind the built-ins in:
 
 - PostgreSQL-style certificate controls
-- PostgreSQL-style large-object ergonomics
-- SQLite backup/blob/encryption/attachment/WAL tooling
+- PostgreSQL-style large-object lifecycle semantics
+- SQLite backup/encryption/attachment/WAL tooling
 - editable `RowSet` behavior
 
 ### Stronger than the built-ins
@@ -382,9 +390,9 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Revisit a Firebird-native streaming BLOB handle only if stable blob-id ergonomics can be exposed cleanly
-2. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
-3. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
+1. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
+2. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
+3. Revisit PostgreSQL-style large-object lifecycle semantics only if the shipped Firebird-native blob surface proves insufficient in real projects
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
@@ -393,6 +401,7 @@ Phase 22 closes the narrow PostgreSQL-style `SSLMode` alias gap through an hones
 Phase 23 closes the PostgreSQL large-object parity investigation with a no-go decision on direct API mimicry.
 Phase 24 closes the event feasibility question with a go decision on limited Firebird-native notification support.
 Phase 25 closes that event gap with a shipped `Listen` / `StopListening` / `Notify` / `CheckForNotifications` surface and the `ReceivedNotification` event.
+Phase 26 closes the Firebird-native blob foundation gap with `FirebirdBlob`, `CreateBlob`, `OpenBlob`, and `BindBlob`.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 

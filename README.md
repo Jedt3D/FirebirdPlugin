@@ -13,13 +13,14 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Buffered `RowSet` read navigation: `RowCount`, `MoveToPreviousRow`, `MoveToFirstRow`, `MoveToLastRow`
 - Firebird event notifications: `Listen`, `StopListening`, `CheckForNotifications`, `Notify`, `ReceivedNotification(name, count)`
+- Firebird-native blob foundation: `CreateBlob`, `OpenBlob`, `BindBlob`, `FirebirdBlob`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
 - Transaction info helpers: `HasActiveTransaction`, `TransactionID`, `TransactionIsolation`, `TransactionAccessMode`, `TransactionLockTimeout`
 - Explicit transaction options: `BeginTransactionWithOptions`
 - Services API first slice: `BackupDatabase`, `RestoreDatabase`, `DatabaseStatistics`, `ValidateDatabase`, `SweepDatabase`, `ListLimboTransactions`, `CommitLimboTransaction`, `RollbackLimboTransaction`, `SetSweepInterval`, `ShutdownDenyNewAttachments`, `BringDatabaseOnline`, `DisplayUsers`, `AddUser`, `ChangeUserPassword`, `SetUserAdmin`, `UpdateUserNames`, `DeleteUser`, `LastServiceOutput`
 - Prepared `DateTime` binding for Firebird `DATE`, `TIME`, and `TIMESTAMP` parameters
-- Explicit text and binary BLOB binding: `BindTextBlob`, `BindBinaryBlob`
+- Explicit and streaming BLOB support: `BindTextBlob`, `BindBinaryBlob`, `CreateBlob`, `OpenBlob`, `BindBlob`
 - Firebird 4/5/6 modern types exposed safely through string semantics:
   `INT128`, `DECFLOAT(16/34)`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE`
 - Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
@@ -67,7 +68,7 @@ Catch err As DatabaseException
 End Try
 ```
 
-More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOBs, Firebird 4/5/6 modern types, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
+More examples in the [`examples/`](examples/) directory, including prepared statements, transactions, NULL handling, date/time types, BLOB binds and streaming, Firebird 4/5/6 modern types, and Firebird-specific features (RETURNING clauses, CTEs, window functions, EXECUTE BLOCK).
 
 ## `Database.AddRow` and Generated IDs
 
@@ -473,6 +474,57 @@ payload.StringValue(0, payloadText.Bytes) = payloadText
 ps.BindBinaryBlob(4, payload)
 ps.ExecuteSQL
 ```
+
+## Blob Streaming
+
+Phase 26 adds an honest Firebird-native blob object instead of a fake PostgreSQL large-object clone:
+
+- `CreateBlob() As FirebirdBlob`
+- `OpenBlob(rowset As RowSet, column As String) As FirebirdBlob`
+- `BindBlob(index As Integer, value As FirebirdBlob)`
+
+```vb
+db.BeginTransaction
+
+Var blob As FirebirdBlob = db.CreateBlob
+
+Var firstText As String = "hello "
+Var firstChunk As New MemoryBlock(firstText.Bytes)
+firstChunk.StringValue(0, firstText.Bytes) = firstText
+blob.Write(firstChunk)
+
+Var secondText As String = "world"
+Var secondChunk As New MemoryBlock(secondText.Bytes)
+secondChunk.StringValue(0, secondText.Bytes) = secondText
+blob.Write(secondChunk)
+Call blob.Close
+
+Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
+  db.Prepare("INSERT INTO blob_stream_demo (payload) VALUES (?)"))
+ps.BindBlob(0, blob)
+ps.ExecuteSQL
+
+Var rs As RowSet = db.SelectSQL("SELECT payload FROM blob_stream_demo")
+If Not rs.AfterLastRow Then
+  Var opened As FirebirdBlob = db.OpenBlob(rs, "PAYLOAD")
+  System.DebugLog("Length: " + opened.Length.ToString)
+
+  Var firstFive As MemoryBlock = opened.Read(5)
+  Call opened.Seek(0, 0)
+  Var fullPayload As MemoryBlock = opened.Read(opened.Length)
+  Call opened.Close
+End If
+rs.Close
+
+Call db.RollbackTransaction
+```
+
+Notes:
+
+- `FirebirdBlob` is transaction-bound because Firebird blob locators are transaction-bound
+- `OpenBlob` is intentionally based on a `RowSet` column, not a fake global blob-id lifecycle
+- `Seek` uses deterministic plugin-level behavior for read blobs instead of pretending Firebird blobs are PostgreSQL large objects
+- `BindTextBlob` / `BindBinaryBlob` remain the simplest path for normal one-shot binds
 
 ## Firebird 4/5/6 Modern Types
 

@@ -104,6 +104,8 @@ End Sub
 // ---------------------------------------------------------------------------
 
 Sub FirebirdOnlySurface(db As FirebirdDatabase)
+  Var rs As RowSet
+
   // Database info helpers
   Var version As String = db.ServerVersion
   Var pageSize As Integer = db.PageSize
@@ -220,11 +222,41 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
 
   // Firebird event notifications
   AddHandler db.ReceivedNotification, AddressOf HandleFirebirdNotification
-  db.Listen("RefreshAll")
-  db.Notify("RefreshAll")
-  db.CheckForNotifications
-  db.StopListening("RefreshAll")
+  Call db.Listen("RefreshAll")
+  Call db.Notify("RefreshAll")
+  Call db.CheckForNotifications
+  Call db.StopListening("RefreshAll")
   RemoveHandler db.ReceivedNotification, AddressOf HandleFirebirdNotification
+
+  // Firebird-native blob foundation
+  Var streamBlob As FirebirdBlob = db.CreateBlob
+
+  Var streamTextA As String = "hello "
+  Var streamChunkA As New MemoryBlock(streamTextA.Bytes)
+  streamChunkA.StringValue(0, streamTextA.Bytes) = streamTextA
+  Call streamBlob.Write(streamChunkA)
+
+  Var streamTextB As String = "world"
+  Var streamChunkB As New MemoryBlock(streamTextB.Bytes)
+  streamChunkB.StringValue(0, streamTextB.Bytes) = streamTextB
+  Call streamBlob.Write(streamChunkB)
+  Call streamBlob.Close
+
+  Var blobPs As FirebirdPreparedStatement = FirebirdPreparedStatement( _
+    db.Prepare("INSERT INTO documents (payload) VALUES (?)"))
+  blobPs.BindBlob(0, streamBlob)
+  blobPs.ExecuteSQL
+
+  rs = db.SelectSQL("SELECT payload FROM documents")
+  If Not rs.AfterLastRow Then
+    Var openedBlob As FirebirdBlob = db.OpenBlob(rs, "payload")
+    Var firstBytes As MemoryBlock = openedBlob.Read(4)
+    Var blobLength As Int64 = openedBlob.Length
+    Call openedBlob.Seek(0, 0)
+    Var allBytes As MemoryBlock = openedBlob.Read(openedBlob.Length)
+    Call openedBlob.Close
+  End If
+  rs.Close
 
   // Prepared temporal and BLOB binds
   Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement( _
@@ -250,7 +282,7 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   ps.Bind(3, "2026-04-06 13:14:15.3456 UTC")
   ps.ExecuteSQL
 
-  Var rs As RowSet = db.SelectSQL("SELECT v_int128, v_dec34, v_time_tz, v_ts_tz FROM modern_values")
+  rs = db.SelectSQL("SELECT v_int128, v_dec34, v_time_tz, v_ts_tz FROM modern_values")
   If Not rs.AfterLastRow Then
     Var int128Text As String = rs.Column("v_int128").StringValue
     Var dec34Text As String = rs.Column("v_dec34").StringValue
