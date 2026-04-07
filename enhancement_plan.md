@@ -8,6 +8,7 @@ Phase 20 closes the first connection-security implementation slice through `Wire
 Phase 21 closes the first `RowSet` ergonomics slice through buffered read navigation and real `RowCount`.
 Phase 22 closes the narrow `SSLMode` alias gap through an honest wrapper over `WireCrypt`.
 Phase 23 closes the PostgreSQL large-object parity investigation with a no-go decision on direct API mimicry.
+Phase 24 closes the event feasibility question with a go decision on limited Firebird-native notification support.
 
 ## Goal
 
@@ -34,7 +35,7 @@ The main parity gaps identified in [drivers-comparison.md](drivers-comparison.md
 
 - PostgreSQL-style certificate controls
 - Firebird-native streaming BLOB support with clean Xojo ergonomics
-- event/notification-style support
+- shipped event/notification-style support
 - editable `RowSet` behavior only if it creates a real Xojo-visible gain
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
@@ -43,6 +44,7 @@ Phase 20 closes the first Firebird-native connection-security implementation sli
 Phase 21 closes the first `RowSet` ergonomics slice through buffered read navigation and real `RowCount`.
 Phase 22 closes the narrow `SSLMode` alias slice over `WireCrypt`.
 Phase 23 closes the large-object parity investigation and recommends against direct PostgreSQL-style naming.
+Phase 24 closes the event feasibility investigation and recommends implementing a limited event API next.
 
 ## Decision Update From User Direction
 
@@ -176,6 +178,7 @@ Recommendation:
 
 - only do this if there is real user demand for asynchronous database events
 - if implemented, keep it explicitly Firebird-native rather than pretending it is PostgreSQL-compatible
+- Phase 24 conclusion: this should now move from feasibility to implementation
 
 ### 5. Dedicated Firebird BLOB object
 
@@ -226,7 +229,7 @@ This is the right long-term differentiator because Xojo's built-in drivers do no
 If the goal is "first-class built-in driver feel" with PostgreSQL as the gold standard, the best order is now:
 
 1. improve `RowSet` capability where it creates a real PostgreSQL-visible parity gain
-2. evaluate event/notification support if Firebird's event model maps cleanly enough to a PostgreSQL-like Xojo surface
+2. implement a limited Firebird event API
 3. revisit a Firebird-native streaming BLOB handle only if blob-id ergonomics can be exposed cleanly
 4. revisit editable `RowSet` behavior only if it creates a real PostgreSQL-visible gain
 5. then return to deeper Firebird-specific service/admin expansion
@@ -263,7 +266,7 @@ Expected value:
 
 ### Wave 2: Structural parity work
 
-- evaluate event support if the Firebird mapping is clean and the use case is real
+- implement a limited event API with Firebird-native notification semantics
 - implement a dedicated Firebird-native streaming BLOB surface only if blob-id ergonomics are clean and the use case is real
 
 Expected value:
@@ -327,12 +330,12 @@ Using `PostgreSQLDatabase` as the gold standard implies these practical targets:
 - the narrow `SSLMode` alias is complete in Phase 22, but certificate-path properties are not yet justified by the official Firebird connection model
 - large-object parity investigation in Phase 23 concluded that direct PostgreSQL naming is not a clean fit for Firebird
 - if streaming support is added later, it should be Firebird-native and explicit about transaction-bound semantics
-- event support should aim for a Xojo-style pattern similar to:
+- Phase 24 concludes that event support should aim for a Xojo-style pattern similar to:
   - `Listen`
   - `Notify`
   - `StopListening`
   - `CheckForNotifications`
-  - a notification event
+  - a notification event carrying `Name` and `Count`
 
 This also changes the interpretation of `RowSet` work:
 
@@ -344,7 +347,7 @@ This also changes the interpretation of `RowSet` work:
 
 If I were choosing the best path for the next engineering pass, I would do this:
 
-1. evaluate event support next
+1. implement a limited Firebird event API next
 2. revisit a Firebird-native streaming BLOB handle only if a practical blob-id story is defined
 3. revisit editable `RowSet` behavior only if a strong Xojo use case appears
 4. then continue expanding Firebird's distinctive admin/service strengths
@@ -360,7 +363,7 @@ Why this is best:
 
 Default recommended next step:
 
-- evaluate event support only if there is a real app-driven need and the Firebird mapping is clean
+- implement a limited Firebird event API
 
 Default recommended second step:
 

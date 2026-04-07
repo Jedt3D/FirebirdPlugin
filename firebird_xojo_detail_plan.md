@@ -269,6 +269,7 @@ This table tracks implementation progress against the plan through the currently
 | 21 | buffered `RowSet` read-navigation slice | Complete | `172 passed, 0 failed` | `feature/phase-21` | `a5367c1` | `phase_21_article.md` |
 | 22 | limited `SSLMode` alias over `WireCrypt` | Complete | `175 passed, 0 failed` | `feature/phase-22` | `9179762` | `phase_22_article.md` |
 | 23 | PostgreSQL large-object parity investigation | Complete | `n/a (design slice)` | `feature/phase-23` | `64f1126` | `phase_23_article.md` |
+| 24 | Firebird event / notification feasibility investigation | Complete | `n/a (design slice)` | `feature/phase-24` | `a3d3945` | `phase_24_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -575,15 +576,16 @@ Status: completed on April 6, 2026.
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 23
+## Progress Summary Through Phase 24
 
-Planned through Phase 23 and now complete:
+Planned through Phase 24 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
 - Firebird-native `WireCrypt` / `AuthClientPlugins` connection properties
 - limited `SSLMode` alias over `WireCrypt`
 - PostgreSQL large-object parity investigation and design decision
+- Firebird event / notification feasibility investigation and go decision
 - buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -608,13 +610,13 @@ Planned through Phase 23 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 23:
+Still outside completed scope after Phase 24:
 
 - PostgreSQL-style certificate-path properties
 - Firebird-native streaming BLOB surface
+- shipped Firebird event API
 - broader user-management workflows
 - broader maintenance/repair services
-- event API
 - array API
 - interface-based API migration
 
@@ -628,7 +630,7 @@ Still outside completed scope after Phase 23:
 
 ### Do next
 
-- decide whether Firebird event APIs are worth exposing in the public Xojo surface
+- implement a limited Firebird event API
 - revisit a Firebird-native streaming BLOB API only if blob-id ergonomics can be exposed cleanly
 - revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 - revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
