@@ -17,6 +17,8 @@
 #define isc_detach_database ptr_isc_detach_database
 #define isc_open_blob2 ptr_isc_open_blob2
 #define isc_close_blob ptr_isc_close_blob
+#define isc_blob_info ptr_isc_blob_info
+#define isc_seek_blob ptr_isc_seek_blob
 #define isc_get_segment ptr_isc_get_segment
 #define isc_put_segment ptr_isc_put_segment
 #define isc_create_blob2 ptr_isc_create_blob2
@@ -945,6 +947,21 @@ FBDatabase::~FBDatabase() {
     disconnect();
 }
 
+void FBDatabase::registerBlob(FBBlob *blob) {
+    if (!blob) return;
+    if (std::find(mTrackedBlobs.begin(), mTrackedBlobs.end(), blob) == mTrackedBlobs.end()) {
+        mTrackedBlobs.push_back(blob);
+    }
+}
+
+void FBDatabase::unregisterBlob(FBBlob *blob) {
+    if (!blob) return;
+    mTrackedBlobs.erase(
+        std::remove(mTrackedBlobs.begin(), mTrackedBlobs.end(), blob),
+        mTrackedBlobs.end()
+    );
+}
+
 bool FBDatabase::connect(const std::string &database,
                          const std::string &user,
                          const std::string &password,
@@ -1036,6 +1053,11 @@ bool FBDatabase::connect(const std::string &database,
 }
 
 void FBDatabase::disconnect() {
+    for (auto *blob : mTrackedBlobs) {
+        if (blob) blob->invalidateFromDatabase();
+    }
+    mTrackedBlobs.clear();
+
     if (!mConnected) return;
 
     if (mTrans) {
@@ -1218,6 +1240,294 @@ bool FBDatabase::writeBlob(const void *data, size_t len, ISC_QUAD &outId) {
 
     isc_close_blob(mStatus, &blob);
     return true;
+}
+
+FBBlob::FBBlob() {}
+
+FBBlob::~FBBlob() {
+    close();
+    releaseAssociation();
+}
+
+void FBBlob::releaseAssociation() {
+    if (mDB) {
+        mDB->unregisterBlob(this);
+        mDB = nullptr;
+    }
+}
+
+void FBBlob::invalidateFromDatabase() {
+    mBlob = 0;
+    mOpen = false;
+    mWritable = false;
+    mPosition = 0;
+    mDB = nullptr;
+}
+
+bool FBBlob::create(FBDatabase &db) {
+    close();
+    releaseAssociation();
+
+    if (!db.isConnected()) {
+        db.setError(-200180, "Database is not connected");
+        return false;
+    }
+    if (!db.ensureTransaction()) return false;
+
+    db.clearError();
+    isc_blob_handle blob = 0;
+    ISC_QUAD blobId = {};
+    if (isc_create_blob2(db.mStatus, &db.mDB, &db.mTrans, &blob, &blobId, 0, nullptr)) {
+        db.captureError();
+        return false;
+    }
+
+    mDB = &db;
+    mDB->registerBlob(this);
+    mBlob = blob;
+    mBlobId = blobId;
+    mOpen = true;
+    mWritable = true;
+    mLengthKnown = true;
+    mPosition = 0;
+    mLength = 0;
+    return true;
+}
+
+bool FBBlob::open(FBDatabase &db, ISC_QUAD blobId) {
+    close();
+    releaseAssociation();
+
+    if (!db.isConnected()) {
+        db.setError(-200180, "Database is not connected");
+        return false;
+    }
+    if (!db.ensureTransaction()) return false;
+
+    db.clearError();
+    isc_blob_handle blob = 0;
+    if (isc_open_blob2(db.mStatus, &db.mDB, &db.mTrans, &blob, &blobId, 0, nullptr)) {
+        db.captureError();
+        return false;
+    }
+
+    mDB = &db;
+    mDB->registerBlob(this);
+    mBlob = blob;
+    mBlobId = blobId;
+    mOpen = true;
+    mWritable = false;
+    mLengthKnown = false;
+    mPosition = 0;
+    mLength = 0;
+    return refreshInfo();
+}
+
+bool FBBlob::close() {
+    if (!mOpen) return true;
+
+    if (!mDB) {
+        mBlob = 0;
+        mOpen = false;
+        mWritable = false;
+        mPosition = 0;
+        return true;
+    }
+
+    mDB->clearError();
+    if (isc_close_blob(mDB->mStatus, &mBlob)) {
+        mDB->captureError();
+        return false;
+    }
+
+    mBlob = 0;
+    mOpen = false;
+    mWritable = false;
+    mPosition = 0;
+    return true;
+}
+
+bool FBBlob::refreshInfo() {
+    if (!mDB || !mOpen) return false;
+
+    mDB->clearError();
+    const char items[] = {
+        (char)isc_info_blob_total_length
+    };
+    char info[32] = {};
+    if (isc_blob_info(mDB->mStatus, &mBlob, (short)sizeof(items), items, (short)sizeof(info), info)) {
+        mDB->captureError();
+        return false;
+    }
+
+    size_t pos = 0;
+    while (pos < sizeof(info)) {
+        unsigned char item = (unsigned char)info[pos];
+        if (item == isc_info_end || item == isc_info_truncated) break;
+        if (pos + 3 > sizeof(info)) break;
+
+        short len = (short)isc_vax_integer(&info[pos + 1], 2);
+        if (pos + 3 + (size_t)len > sizeof(info)) break;
+
+        if (item == isc_info_blob_total_length) {
+            mLength = (int64_t)isc_vax_integer(&info[pos + 3], len);
+            mLengthKnown = true;
+            return true;
+        }
+
+        pos += 3 + (size_t)len;
+    }
+
+    mDB->setError(-200181, "Unexpected blob info response");
+    return false;
+}
+
+bool FBBlob::read(size_t count, std::string &out) {
+    out.clear();
+    if (!mDB || !mOpen) {
+        if (mDB) mDB->setError(-200182, "Blob is not open");
+        return false;
+    }
+    if (mWritable) {
+        mDB->setError(-200183, "Blob was opened for writing");
+        return false;
+    }
+    if (count == 0) return true;
+
+    mDB->clearError();
+    char buffer[4096];
+
+    while (out.size() < count) {
+        const size_t remaining = count - out.size();
+        const unsigned short request = (unsigned short)std::min<size_t>(remaining, sizeof(buffer));
+        unsigned short actual = 0;
+        ISC_STATUS stat = isc_get_segment(mDB->mStatus, &mBlob, &actual, request, buffer);
+        if (stat == 0 || mDB->mStatus[1] == isc_segment) {
+            out.append(buffer, actual);
+            mPosition += actual;
+            continue;
+        }
+        if (mDB->mStatus[1] == isc_segstr_eof) {
+            break;
+        }
+
+        mDB->captureError();
+        return false;
+    }
+
+    return true;
+}
+
+bool FBBlob::write(const void *data, size_t len) {
+    if (!mDB || !mOpen) {
+        if (mDB) mDB->setError(-200182, "Blob is not open");
+        return false;
+    }
+    if (!mWritable) {
+        mDB->setError(-200184, "Blob was not created for writing");
+        return false;
+    }
+
+    mDB->clearError();
+    const char *ptr = static_cast<const char *>(data);
+    size_t remaining = len;
+    while (remaining > 0) {
+        const unsigned short chunk = (unsigned short)std::min<size_t>(remaining, 32767);
+        if (isc_put_segment(mDB->mStatus, &mBlob, chunk, ptr)) {
+            mDB->captureError();
+            return false;
+        }
+        ptr += chunk;
+        remaining -= chunk;
+        mPosition += chunk;
+    }
+
+    if (mPosition > mLength) mLength = mPosition;
+    mLengthKnown = true;
+    return true;
+}
+
+int64_t FBBlob::seek(int64_t offset, int mode) {
+    if (!mDB || !mOpen) {
+        if (mDB) mDB->setError(-200182, "Blob is not open");
+        return -1;
+    }
+    if (mWritable) {
+        mDB->setError(-200186, "Seek is only supported on opened read blobs");
+        return -1;
+    }
+    if (mode < 0 || mode > 2) {
+        mDB->setError(-200185, "Blob seek mode must be 0, 1, or 2");
+        return -1;
+    }
+    if (!mLengthKnown && !refreshInfo()) {
+        return -1;
+    }
+
+    int64_t target = 0;
+    switch (mode) {
+        case 0: {
+            target = offset;
+            break;
+        }
+        case 1: {
+            target = mPosition + offset;
+            break;
+        }
+        case 2: {
+            target = mLength + offset;
+            break;
+        }
+    }
+
+    if (target < 0) {
+        mDB->setError(-200187, "Blob seek target cannot be negative");
+        return -1;
+    }
+    if (target > mLength) {
+        target = mLength;
+    }
+    if (target == mPosition) {
+        return mPosition;
+    }
+
+    mDB->clearError();
+    if (isc_close_blob(mDB->mStatus, &mBlob)) {
+        mDB->captureError();
+        return -1;
+    }
+
+    mBlob = 0;
+    if (isc_open_blob2(mDB->mStatus, &mDB->mDB, &mDB->mTrans, &mBlob, &mBlobId, 0, nullptr)) {
+        mDB->captureError();
+        mOpen = false;
+        return -1;
+    }
+
+    mOpen = true;
+    mWritable = false;
+    mPosition = 0;
+
+    std::string discard;
+    while (mPosition < target) {
+        const size_t remaining = (size_t)(target - mPosition);
+        const size_t chunk = std::min<size_t>(remaining, 4096);
+        if (!read(chunk, discard)) {
+            return -1;
+        }
+        if (discard.empty()) {
+            break;
+        }
+    }
+
+    return mPosition;
+}
+
+int64_t FBBlob::length() {
+    if (!mLengthKnown && mOpen && mDB) {
+        refreshInfo();
+    }
+    return mLength;
 }
 
 bool FBDatabase::databaseInfo(const unsigned char *items, short itemLen, std::vector<char> &out) {
@@ -3128,6 +3438,17 @@ void FBStatement::bindBlob(int index, FBDatabase &db, const void *data, size_t l
 
     ISC_QUAD blobId;
     if (!db.writeBlob(data, len, blobId)) return;
+
+    var->sqltype = SQL_BLOB | (var->sqltype & 1);
+    if (var->sqldata) free(var->sqldata);
+    var->sqldata = (char *)calloc(1, sizeof(ISC_QUAD));
+    *(ISC_QUAD *)var->sqldata = blobId;
+    if (var->sqlind) *var->sqlind = 0;
+}
+
+void FBStatement::bindExistingBlob(int index, ISC_QUAD blobId) {
+    if (!mInSqlda || index >= mInSqlda->sqld) return;
+    XSQLVAR *var = &mInSqlda->sqlvar[index];
 
     var->sqltype = SQL_BLOB | (var->sqltype & 1);
     if (var->sqldata) free(var->sqldata);

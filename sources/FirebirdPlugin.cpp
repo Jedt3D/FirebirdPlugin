@@ -82,6 +82,8 @@ static void         fbClassListen(REALobject instance, REALstring name);
 static void         fbClassStopListening(REALobject instance, REALstring name);
 static void         fbClassCheckForNotifications(REALobject instance);
 static void         fbClassNotify(REALobject instance, REALstring name);
+static REALobject   fbClassCreateBlob(REALobject instance);
+static REALobject   fbClassOpenBlob(REALobject instance, REALdbCursor rowset, REALstring column);
 static REALstring   fbClassWireCryptGet(REALobject instance, long param);
 static void         fbClassWireCryptSet(REALobject instance, long param, REALstring value);
 static RBInteger    fbClassSSLModeGet(REALobject instance, long param);
@@ -127,9 +129,22 @@ static void         fbPrepStmtBindBoolean(REALobject instance, int32_t index, RB
 static void         fbPrepStmtBindDateTime(REALobject instance, int32_t index, REALobject value);
 static void         fbPrepStmtBindTextBlob(REALobject instance, int32_t index, REALstring value);
 static void         fbPrepStmtBindBinaryBlob(REALobject instance, int32_t index, REALobject value);
+static void         fbPrepStmtBindBlob(REALobject instance, int32_t index, REALobject value);
 static void         fbPrepStmtBindNull(REALobject instance, int32_t index);
 static REALdbCursor fbPrepStmtSelectSQL(REALobject instance);
 static void         fbPrepStmtExecuteSQL(REALobject instance);
+
+// FirebirdBlob class methods
+static void         fbBlobConstructor(REALobject instance);
+static void         fbBlobDestructor(REALobject instance);
+static REALstring   fbBlobIdGet(REALobject instance, long param);
+static RBInt64      fbBlobLengthGet(REALobject instance, long param);
+static RBInt64      fbBlobPositionGet(REALobject instance, long param);
+static RBBoolean    fbBlobIsOpenGet(REALobject instance, long param);
+static REALobject   fbBlobRead(REALobject instance, int32_t count);
+static RBBoolean    fbBlobWrite(REALobject instance, REALobject value);
+static RBInt64      fbBlobSeek(REALobject instance, RBInt64 offset, int32_t whence);
+static RBBoolean    fbBlobClose(REALobject instance);
 
 // ============================================================================
 // Static data structures (must be defined before functions that reference them)
@@ -232,6 +247,8 @@ static REALmethodDefinition sFirebirdClassMethods[] = {
     { (REALproc)fbClassStopListening, REALnoImplementation, "StopListening(name As String)", REALconsoleSafe },
     { (REALproc)fbClassCheckForNotifications, REALnoImplementation, "CheckForNotifications()", REALconsoleSafe },
     { (REALproc)fbClassNotify, REALnoImplementation, "Notify(name As String)", REALconsoleSafe },
+    { (REALproc)fbClassCreateBlob, REALnoImplementation, "CreateBlob() As FirebirdBlob", REALconsoleSafe },
+    { (REALproc)fbClassOpenBlob, REALnoImplementation, "OpenBlob(rowset As RowSet, column As String) As FirebirdBlob", REALconsoleSafe },
     { (REALproc)fbClassServerVersion, REALnoImplementation, "ServerVersion() As String", REALconsoleSafe },
     { (REALproc)fbClassPageSize, REALnoImplementation, "PageSize() As Integer", REALconsoleSafe },
     { (REALproc)fbClassDatabaseSQLDialect, REALnoImplementation, "DatabaseSQLDialect() As Integer", REALconsoleSafe },
@@ -307,6 +324,8 @@ static REALmethodDefinition sFirebirdPreparedStmtMethods[] = {
       "BindTextBlob(index As Integer, value As String)", REALconsoleSafe },
     { (REALproc)fbPrepStmtBindBinaryBlob, REALnoImplementation,
       "BindBinaryBlob(index As Integer, value As MemoryBlock)", REALconsoleSafe },
+    { (REALproc)fbPrepStmtBindBlob, REALnoImplementation,
+      "BindBlob(index As Integer, value As FirebirdBlob)", REALconsoleSafe },
     { (REALproc)fbPrepStmtBindNull, REALnoImplementation,
       "BindNull(index As Integer)", REALconsoleSafe },
     { (REALproc)fbPrepStmtSelectSQL, REALnoImplementation,
@@ -340,6 +359,52 @@ static REALclassDefinition sFirebirdPreparedStmtClass = {
 #endif
 };
 
+// --- FirebirdBlob Class -----------------------------------------------------
+
+static REALproperty sFirebirdBlobProperties[] = {
+    { "", "BlobId", "String", REALconsoleSafe, (REALproc)fbBlobIdGet, nullptr, 0 },
+    { "", "Length", "Int64", REALconsoleSafe, (REALproc)fbBlobLengthGet, nullptr, 0 },
+    { "", "Position", "Int64", REALconsoleSafe, (REALproc)fbBlobPositionGet, nullptr, 0 },
+    { "", "IsOpen", "Boolean", REALconsoleSafe, (REALproc)fbBlobIsOpenGet, nullptr, 0 },
+};
+
+static REALmethodDefinition sFirebirdBlobMethods[] = {
+    { (REALproc)fbBlobRead, REALnoImplementation,
+      "Read(count As Integer) As MemoryBlock", REALconsoleSafe },
+    { (REALproc)fbBlobWrite, REALnoImplementation,
+      "Write(value As MemoryBlock) As Boolean", REALconsoleSafe },
+    { (REALproc)fbBlobSeek, REALnoImplementation,
+      "Seek(offset As Int64, whence As Integer) As Int64", REALconsoleSafe },
+    { (REALproc)fbBlobClose, REALnoImplementation,
+      "Close() As Boolean", REALconsoleSafe },
+};
+
+static REALclassDefinition sFirebirdBlobClass = {
+    kCurrentREALControlVersion,
+    "FirebirdBlob",                          // name
+    nullptr,                                  // superName
+    sizeof(FirebirdBlobData),                // dataSize
+    0,                                       // forSystemUse
+    (REALproc)fbBlobConstructor,
+    (REALproc)fbBlobDestructor,
+    sFirebirdBlobProperties,
+    sizeof(sFirebirdBlobProperties) / sizeof(REALproperty),
+    sFirebirdBlobMethods,
+    sizeof(sFirebirdBlobMethods) / sizeof(REALmethodDefinition),
+    nullptr, 0,                              // events
+    nullptr, 0,                              // eventInstances
+    nullptr,                                 // interfaces
+    nullptr, 0,                              // attributes
+    nullptr, 0,                              // constants
+    0,                                       // mFlags
+    nullptr, 0,                              // sharedProperties
+    nullptr, 0,                              // sharedMethods
+#if kCurrentREALControlVersion >= 11
+    nullptr, 0,                              // delegates
+    nullptr, 0,                              // enums
+#endif
+};
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -357,6 +422,58 @@ static std::string RealToStd(REALstring rs) {
 
 static REALstring StdToReal(const std::string &s) {
     return REALBuildStringWithEncoding(s.c_str(), (int)s.size(), kREALTextEncodingUTF8);
+}
+
+static constexpr uint32_t kFirebirdCursorSignature = 0x46424355;
+
+static std::string BlobIdToString(const ISC_QUAD &blobId) {
+    const uint32_t high = (uint32_t)blobId.gds_quad_high;
+    const uint32_t low = (uint32_t)blobId.gds_quad_low;
+    return std::to_string(high) + ":" + std::to_string(low);
+}
+
+static FirebirdCursorData *GetFirebirdCursorData(REALdbCursor rowset) {
+    dbCursor *cursor = REALGetCursorFromREALdbCursor(rowset);
+    if (!cursor) return nullptr;
+
+    auto *cd = reinterpret_cast<FirebirdCursorData *>(cursor);
+    if (cd->signature != kFirebirdCursorSignature) return nullptr;
+    return cd;
+}
+
+static int FindCursorColumnIndex(FirebirdCursorData *cd, const std::string &columnName) {
+    if (!cd || !cd->stmt) return -1;
+
+    std::string wanted = columnName;
+    while (!wanted.empty() && std::isspace((unsigned char)wanted.front())) wanted.erase(wanted.begin());
+    while (!wanted.empty() && std::isspace((unsigned char)wanted.back())) wanted.pop_back();
+    for (auto &ch : wanted) ch = (char)std::toupper((unsigned char)ch);
+
+    const int count = cd->stmt->columnCount();
+    for (int i = 0; i < count; i++) {
+        const auto &info = cd->stmt->columnInfo(i);
+        std::string alias = info.alias.empty() ? info.name : info.alias;
+        std::string name = info.name;
+        for (auto &ch : alias) ch = (char)std::toupper((unsigned char)ch);
+        for (auto &ch : name) ch = (char)std::toupper((unsigned char)ch);
+        if (alias == wanted || name == wanted) return i;
+    }
+
+    return -1;
+}
+
+static REALobject NewFirebirdBlobObject(FBBlob *blob) {
+    if (!blob) return nullptr;
+
+    REALobject obj = REALnewInstanceOfClass(&sFirebirdBlobClass);
+    if (!obj) {
+        delete blob;
+        return nullptr;
+    }
+
+    auto *blobData = (FirebirdBlobData *)REALGetClassData(obj, &sFirebirdBlobClass);
+    blobData->blob = blob;
+    return obj;
 }
 
 static void SetRealStringField(REALstring &field, const std::string &value) {
@@ -866,6 +983,7 @@ static dbFieldType FirebirdTypeToXojo(short fbType, short scale, short subtype) 
 
 static FirebirdCursorData *NewCursorData(FBDatabase *db, FBStatement *stmt) {
     auto *cd = new FirebirdCursorData;
+    cd->signature = kFirebirdCursorSignature;
     cd->db = db;
     cd->stmt = stmt;
     cd->firstRowCalled = false;
@@ -925,6 +1043,11 @@ static void UpdateCursorFlags(FirebirdCursorData *cd) {
 static bool IsMemoryBlockObject(REALobject value) {
     static REALclassRef memoryBlockClass = REALGetClassRef("MemoryBlock");
     return value && memoryBlockClass && REALObjectIsA(value, memoryBlockClass);
+}
+
+static bool IsFirebirdBlobObject(REALobject value) {
+    static REALclassRef firebirdBlobClass = REALGetClassRef("FirebirdBlob");
+    return value && firebirdBlobClass && REALObjectIsA(value, firebirdBlobClass);
 }
 
 static bool IsDateTimeObject(REALobject value) {
@@ -2123,6 +2246,69 @@ static void fbClassNotify(REALobject instance, REALstring name) {
     }
 }
 
+static REALobject fbClassCreateBlob(REALobject instance) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return nullptr;
+    if (!fbd->db->isConnected()) {
+        fbd->db->setError(-200180, "Database is not connected");
+        return nullptr;
+    }
+
+    auto *blob = new FBBlob();
+    if (!blob->create(*fbd->db)) {
+        delete blob;
+        return nullptr;
+    }
+
+    return NewFirebirdBlobObject(blob);
+}
+
+static REALobject fbClassOpenBlob(REALobject instance, REALdbCursor rowset, REALstring column) {
+    auto *fbd = EnsureFirebirdDbData(instance);
+    if (!fbd || !fbd->db) return nullptr;
+
+    auto *cd = GetFirebirdCursorData(rowset);
+    if (!cd || !cd->stmt || cd->db != fbd->db) {
+        fbd->db->setError(-200186, "RowSet does not belong to this FirebirdDatabase instance");
+        return nullptr;
+    }
+
+    int rowIndex = cd->currentRow;
+    if (rowIndex < 0) rowIndex = 0;
+    if (!EnsureCursorRow(cd, rowIndex)) {
+        fbd->db->setError(-200187, "RowSet is not positioned on a valid row");
+        return nullptr;
+    }
+
+    const std::string columnName = RealToStd(column);
+    const int columnIndex = FindCursorColumnIndex(cd, columnName);
+    if (columnIndex < 0) {
+        fbd->db->setError(-200188, "Blob column was not found in the RowSet");
+        return nullptr;
+    }
+
+    const auto &info = cd->stmt->columnInfo(columnIndex);
+    if ((info.baseType()) != SQL_BLOB) {
+        fbd->db->setError(-200189, "Selected column is not a BLOB");
+        return nullptr;
+    }
+
+    const auto &row = cd->rows[(size_t)rowIndex];
+    const auto &value = row[(size_t)columnIndex];
+    if (value.isNull) {
+        fbd->db->setError(-200190, "Selected BLOB column is NULL");
+        return nullptr;
+    }
+
+    auto *blob = new FBBlob();
+    if (!blob->open(*fbd->db, value.blobId)) {
+        delete blob;
+        return nullptr;
+    }
+
+    return NewFirebirdBlobObject(blob);
+}
+
 static REALstring fbClassServerVersion(REALobject instance) {
     auto *fbd = GetFirebirdDbData(instance);
     if (!fbd || !fbd->db) return StdToReal("");
@@ -2460,6 +2646,27 @@ static void fbPrepStmtBindBinaryBlob(REALobject instance, int32_t index, REALobj
     }
 }
 
+static void fbPrepStmtBindBlob(REALobject instance, int32_t index, REALobject value) {
+    ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
+    if (!data->db || !data->stmt || !value) return;
+    if (!IsFirebirdBlobObject(value)) {
+        data->db->setError(-200191, "BindBlob expects a FirebirdBlob instance");
+        return;
+    }
+
+    auto *blobData = (FirebirdBlobData *)REALGetClassData(value, &sFirebirdBlobClass);
+    if (!blobData || !blobData->blob) return;
+    if (blobData->blob->database() != data->db) {
+        data->db->setError(-200192, "Blob belongs to a different FirebirdDatabase connection");
+        return;
+    }
+    if (blobData->blob->isOpen() && !blobData->blob->close()) {
+        return;
+    }
+
+    data->stmt->bindExistingBlob(index, blobData->blob->blobId());
+}
+
 static void fbPrepStmtBindNull(REALobject instance, int32_t index) {
     ClassData(sFirebirdPreparedStmtClass, instance, FirebirdPreparedStmtData, data);
     if (!data->stmt) return;
@@ -2486,6 +2693,86 @@ static void fbPrepStmtExecuteSQL(REALobject instance) {
 }
 
 // ============================================================================
+// FirebirdBlob Class Implementation
+// ============================================================================
+
+static void fbBlobConstructor(REALobject instance) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    data->blob = nullptr;
+}
+
+static void fbBlobDestructor(REALobject instance) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (data->blob) {
+        delete data->blob;
+        data->blob = nullptr;
+    }
+}
+
+static REALstring fbBlobIdGet(REALobject instance, long) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob) return StdToReal("");
+    return StdToReal(BlobIdToString(data->blob->blobId()));
+}
+
+static RBInt64 fbBlobLengthGet(REALobject instance, long) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob) return 0;
+    return (RBInt64)data->blob->length();
+}
+
+static RBInt64 fbBlobPositionGet(REALobject instance, long) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob) return 0;
+    return (RBInt64)data->blob->position();
+}
+
+static RBBoolean fbBlobIsOpenGet(REALobject instance, long) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    return (data->blob && data->blob->isOpen()) ? 1 : 0;
+}
+
+static REALobject fbBlobRead(REALobject instance, int32_t count) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob || count < 0) return nullptr;
+
+    std::string bytes;
+    if (!data->blob->read((size_t)count, bytes)) return nullptr;
+
+    REALmemoryBlock block = REALNewMemoryBlock((int)bytes.size());
+    if (!block) return nullptr;
+
+    void *ptr = REALMemoryBlockGetPtr(block);
+    if (ptr && !bytes.empty()) {
+        memcpy(ptr, bytes.data(), bytes.size());
+    }
+
+    return block;
+}
+
+static RBBoolean fbBlobWrite(REALobject instance, REALobject value) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob || !IsMemoryBlockObject(value)) return false;
+
+    REALmemoryBlock block = (REALmemoryBlock)value;
+    void *ptr = REALMemoryBlockGetPtr(block);
+    RBInteger size = REALMemoryBlockGetSize(block);
+    return data->blob->write(ptr, (size_t)size) ? 1 : 0;
+}
+
+static RBInt64 fbBlobSeek(REALobject instance, RBInt64 offset, int32_t whence) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob) return -1;
+    return (RBInt64)data->blob->seek((int64_t)offset, whence);
+}
+
+static RBBoolean fbBlobClose(REALobject instance) {
+    ClassData(sFirebirdBlobClass, instance, FirebirdBlobData, data);
+    if (!data->blob) return true;
+    return data->blob->close() ? 1 : 0;
+}
+
+// ============================================================================
 // PluginEntry — called by the Xojo runtime via PluginMain.cpp glue
 // ============================================================================
 
@@ -2498,4 +2785,7 @@ void PluginEntry() {
 
     SetClassConsoleSafe(&sFirebirdPreparedStmtClass);
     REALRegisterClass(&sFirebirdPreparedStmtClass);
+
+    SetClassConsoleSafe(&sFirebirdBlobClass);
+    REALRegisterClass(&sFirebirdBlobClass);
 }

@@ -314,6 +314,7 @@ End
 		  TestPreparedStatementBindTypes
 		  TestPreparedStatementBindTemporalTypes
 		  TestPreparedStatementBindBlobs
+		  TestBlobStreaming
 		  TestPreparedStatementBindNull
 		  TestNativeBooleanRoundTrip
 		  TestScaledNumericRoundTrip
@@ -1439,6 +1440,142 @@ End
 		    LogFail "Bind BLOBs", ex.Message
 		  Catch ex As RuntimeException
 		    LogFail "Bind BLOBs", ex.Message
+		  End Try
+		  
+		  db.Close
+		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h1
+		Protected Sub TestBlobStreaming()
+		  Log "-- Test: Blob streaming --"
+		  
+		  Var db As FirebirdDatabase = OpenTestDB
+		  If db = Nil Then Return
+		  
+		  Try
+		    db.ExecuteSQL("RECREATE TABLE test_blob_stream (id INTEGER NOT NULL, payload BLOB)")
+		    db.BeginTransaction
+		    If db.HasActiveTransaction = False Then
+		      LogFail "Blob streaming", "BeginTransaction did not activate a transaction"
+		      db.Close
+		      Return
+		    End If
+		    
+		    Var chunk1Text As String = "Firebird" + Chr(0) + "-"
+		    Var chunk2Text As String = "Streaming-" + Chr(1) + Chr(2) + "-Blob"
+		    Var payload As String = chunk1Text + chunk2Text
+		    
+		    Var chunk1 As New MemoryBlock(chunk1Text.Bytes)
+		    chunk1.StringValue(0, chunk1Text.Bytes) = chunk1Text
+		    Var chunk2 As New MemoryBlock(chunk2Text.Bytes)
+		    chunk2.StringValue(0, chunk2Text.Bytes) = chunk2Text
+		    
+		    Var blob As FirebirdBlob = db.CreateBlob
+		    If blob = Nil Then
+		      LogFail "CreateBlob", db.ErrorMessage
+		      db.RollbackTransaction
+		      db.Close
+		      Return
+		    End If
+		    
+		    If blob.Write(chunk1) And blob.Write(chunk2) Then
+		      LogPass "Blob Write"
+		    Else
+		      LogFail "Blob Write", db.ErrorMessage
+		    End If
+		    
+		    If blob.Position = payload.Bytes Then
+		      LogPass "Blob Position after write"
+		    Else
+		      LogFail "Blob Position after write", "Expected " + payload.Bytes.ToString + ", got " + blob.Position.ToString
+		    End If
+		    
+		    If blob.BlobId <> "" Then
+		      LogPass "BlobId"
+		    Else
+		      LogFail "BlobId", "Expected non-empty blob id"
+		    End If
+		    
+		    If blob.Close Then
+		      LogPass "Blob Close"
+		    Else
+		      LogFail "Blob Close", db.ErrorMessage
+		    End If
+		    
+		    Var ps As FirebirdPreparedStatement = FirebirdPreparedStatement(db.Prepare("INSERT INTO test_blob_stream (id, payload) VALUES (1, ?)"))
+		    If ps <> Nil Then
+		      ps.BindBlob(0, blob)
+		      ps.ExecuteSQL
+		      LogPass "BindBlob"
+		    Else
+		      LogFail "BindBlob", "Prepare returned Nil"
+		    End If
+		    
+		    Var rs As RowSet = db.SelectSQL("SELECT payload FROM test_blob_stream WHERE id = 1")
+		    If rs = Nil Or rs.AfterLastRow Then
+		      If rs <> Nil Then rs.Close
+		      LogFail "OpenBlob", "No row returned"
+		      db.RollbackTransaction
+		      db.Close
+		      Return
+		    End If
+		    
+		    rs.MoveToFirstRow
+		    Var opened As FirebirdBlob = db.OpenBlob(rs, "PAYLOAD")
+		    If opened = Nil Then
+		      LogFail "OpenBlob", db.ErrorMessage
+		      rs.Close
+		      db.RollbackTransaction
+		      db.Close
+		      Return
+		    End If
+		    
+		    If opened.Length = payload.Bytes Then
+		      LogPass "Blob Length"
+		    Else
+		      LogFail "Blob Length", "Expected " + payload.Bytes.ToString + ", got " + opened.Length.ToString
+		    End If
+		    
+		    Var firstPart As MemoryBlock = opened.Read(5)
+		    If firstPart <> Nil And firstPart.Size = 5 And firstPart.StringValue(0, firstPart.Size) = payload.Middle(0, 5) Then
+		      LogPass "Blob Read"
+		    Else
+		      LogFail "Blob Read", "Unexpected first read"
+		    End If
+		    
+		    Var seekPos As Int64 = opened.Seek(0, 0)
+		    If seekPos = 0 Then
+		      LogPass "Blob Seek"
+		    Else
+		      LogFail "Blob Seek", "Expected 0, got " + seekPos.ToString
+		    End If
+		    
+		    Var fullPayload As MemoryBlock = opened.Read(payload.Bytes)
+		    If fullPayload <> Nil And fullPayload.Size = payload.Bytes And fullPayload.StringValue(0, fullPayload.Size) = payload Then
+		      LogPass "Blob Readback"
+		    Else
+		      LogFail "Blob Readback", "Streaming payload mismatch"
+		    End If
+		    
+		    If opened.Close Then
+		      LogPass "Blob Close readback"
+		    Else
+		      LogFail "Blob Close readback", db.ErrorMessage
+		    End If
+		    
+		    rs.Close
+		    db.RollbackTransaction
+		  Catch ex As DatabaseException
+		    LogFail "Blob streaming", ex.Message
+		    If db.HasActiveTransaction Then
+		      db.RollbackTransaction
+		    End If
+		  Catch ex As RuntimeException
+		    LogFail "Blob streaming", ex.Message
+		    If db.HasActiveTransaction Then
+		      db.RollbackTransaction
+		    End If
 		  End Try
 		  
 		  db.Close

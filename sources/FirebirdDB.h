@@ -52,6 +52,7 @@ struct FBValue {
 // FBStatement — wraps a prepared statement and its XSQLDA descriptors
 // ---------------------------------------------------------------------------
 class FBDatabase;
+class FBBlob;
 
 class FBStatement {
 public:
@@ -81,6 +82,7 @@ public:
     void bindInt(int index, int64_t val);
     void bindDouble(int index, double val);
     void bindBlob(int index, FBDatabase &db, const void *data, size_t len);
+    void bindExistingBlob(int index, ISC_QUAD blobId);
     void bindDate(int index, ISC_DATE val);
     void bindTime(int index, ISC_TIME val);
     void bindTimestamp(int index, ISC_TIMESTAMP val);
@@ -103,6 +105,48 @@ private:
     bool            mPrepared = false;
     bool            mExecuted = false;
     bool            mExecProcRowPending = false;
+
+    friend class FBDatabase;
+};
+
+// ---------------------------------------------------------------------------
+// FBBlob - wraps a Firebird BLOB handle for streaming read/write access
+// ---------------------------------------------------------------------------
+class FBBlob {
+public:
+    FBBlob();
+    ~FBBlob();
+
+    FBBlob(const FBBlob &) = delete;
+    FBBlob &operator=(const FBBlob &) = delete;
+
+    bool create(FBDatabase &db);
+    bool open(FBDatabase &db, ISC_QUAD blobId);
+    bool close();
+    bool read(size_t count, std::string &out);
+    bool write(const void *data, size_t len);
+    int64_t seek(int64_t offset, int mode);
+    int64_t length();
+
+    bool isOpen() const { return mOpen; }
+    bool isWritable() const { return mWritable; }
+    int64_t position() const { return mPosition; }
+    const ISC_QUAD &blobId() const { return mBlobId; }
+    FBDatabase *database() const { return mDB; }
+
+private:
+    bool refreshInfo();
+    void releaseAssociation();
+    void invalidateFromDatabase();
+
+    FBDatabase      *mDB = nullptr;
+    isc_blob_handle  mBlob = 0;
+    ISC_QUAD         mBlobId = {};
+    bool             mOpen = false;
+    bool             mWritable = false;
+    bool             mLengthKnown = false;
+    int64_t          mPosition = 0;
+    int64_t          mLength = 0;
 
     friend class FBDatabase;
 };
@@ -220,6 +264,8 @@ private:
     const char *findInfoItem(const std::vector<char> &info, unsigned char item, short &len) const;
     void captureError();
     void clearError();
+    void registerBlob(FBBlob *blob);
+    void unregisterBlob(FBBlob *blob);
 
     isc_db_handle   mDB = 0;
     isc_tr_handle   mTrans = 0;
@@ -239,8 +285,10 @@ private:
     long            mErrorCode = 0;
     std::string     mErrorMsg;
     int64_t         mAffectedRowCount = 0;
+    std::vector<FBBlob *> mTrackedBlobs;
 
     friend class FBStatement;
+    friend class FBBlob;
 };
 
 #endif // FIREBIRD_DB_H

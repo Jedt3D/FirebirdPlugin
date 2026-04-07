@@ -17,6 +17,8 @@ extern decltype(isc_rollback_transaction)* ptr_isc_rollback_transaction;
 extern decltype(isc_detach_database)* ptr_isc_detach_database;
 extern decltype(isc_open_blob2)* ptr_isc_open_blob2;
 extern decltype(isc_close_blob)* ptr_isc_close_blob;
+extern decltype(isc_blob_info)* ptr_isc_blob_info;
+extern decltype(isc_seek_blob)* ptr_isc_seek_blob;
 extern decltype(isc_get_segment)* ptr_isc_get_segment;
 extern decltype(isc_put_segment)* ptr_isc_put_segment;
 extern decltype(isc_create_blob2)* ptr_isc_create_blob2;

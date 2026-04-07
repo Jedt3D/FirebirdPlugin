@@ -28,6 +28,7 @@ struct FirebirdDbData {
 // Plugin-side cursor struct — stored per RowSet
 // ---------------------------------------------------------------------------
 struct FirebirdCursorData {
+    uint32_t       signature;
     FBDatabase    *db;          // non-owning pointer to the parent database
     FBStatement   *stmt;        // owns this statement
     bool           firstRowCalled;
@@ -46,6 +47,13 @@ struct FirebirdCursorData {
 struct FirebirdPreparedStmtData {
     FBDatabase  *db;            // non-owning
     FBStatement *stmt;          // owns this statement
+};
+
+// ---------------------------------------------------------------------------
+// Plugin-side FirebirdBlob class data
+// ---------------------------------------------------------------------------
+struct FirebirdBlobData {
+    FBBlob *blob;               // owns this blob wrapper
 };
 
 // ---------------------------------------------------------------------------

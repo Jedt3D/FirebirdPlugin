@@ -15,6 +15,8 @@ decltype(isc_rollback_transaction)* ptr_isc_rollback_transaction = nullptr;
 decltype(isc_detach_database)* ptr_isc_detach_database = nullptr;
 decltype(isc_open_blob2)* ptr_isc_open_blob2 = nullptr;
 decltype(isc_close_blob)* ptr_isc_close_blob = nullptr;
+decltype(isc_blob_info)* ptr_isc_blob_info = nullptr;
+decltype(isc_seek_blob)* ptr_isc_seek_blob = nullptr;
 decltype(isc_get_segment)* ptr_isc_get_segment = nullptr;
 decltype(isc_put_segment)* ptr_isc_put_segment = nullptr;
 decltype(isc_create_blob2)* ptr_isc_create_blob2 = nullptr;
@@ -80,6 +82,8 @@ bool LoadFirebirdClient(const char* fbClientPath) {
     RESOLVE_FUNCTION(isc_detach_database);
     RESOLVE_FUNCTION(isc_open_blob2);
     RESOLVE_FUNCTION(isc_close_blob);
+    RESOLVE_FUNCTION(isc_blob_info);
+    RESOLVE_FUNCTION(isc_seek_blob);
     RESOLVE_FUNCTION(isc_get_segment);
     RESOLVE_FUNCTION(isc_put_segment);
     RESOLVE_FUNCTION(isc_create_blob2);
