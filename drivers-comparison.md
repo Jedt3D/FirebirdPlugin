@@ -36,6 +36,11 @@ The Firebird plugin is already on par with Xojo's MySQL and PostgreSQL drivers f
 
 It is also stronger than Xojo's built-in drivers in one important area: Firebird-specific admin and service-manager operations. The current plugin exposes backup, restore, validation, sweep, limbo inspection/recovery, sweep interval, shutdown/online control, and user-management actions directly as Xojo methods.
 
+With Phases 25 and 26, the plugin also closes two practical parity gaps that matter in real app code:
+
+- a PostgreSQL-style listen/notify workflow, implemented honestly as Firebird events
+- a real streaming blob object, implemented honestly as a Firebird-native `FirebirdBlob`
+
 The main areas where it still trails the built-ins are:
 
 - no PostgreSQL-style certificate-path SSL/TLS surface
@@ -110,6 +115,11 @@ These methods are not part of the standard Xojo `Database` API and represent plu
 - `WireCrypt As String`
 - `AuthClientPlugins As String`
 - `SSLMode As Integer`
+- `Listen(name As String)`
+- `StopListening(name As String)`
+- `CheckForNotifications()`
+- `Notify(name As String)`
+- `ReceivedNotification(name As String, count As Integer)`
 - `ServerVersion() As String`
 - `PageSize() As Integer`
 - `DatabaseSQLDialect() As Integer`
@@ -152,6 +162,48 @@ These methods are not part of the standard Xojo `Database` API and represent plu
 - `LastServiceOutput() As String`
 
 This is the single biggest area where the Firebird plugin is ahead of Xojo's built-in drivers.
+
+## 3A. Notifications and Eventing
+
+| Capability | Firebird plugin | PostgreSQL | MySQL | SQLite | Assessment |
+| --- | --- | --- | --- | --- | --- |
+| Listen / notify workflow | Yes | Yes | No equivalent public Xojo surface | No equivalent public Xojo surface | Practical parity with PostgreSQL workflow |
+| Poll-driven delivery API | `CheckForNotifications()` | Yes | n/a | n/a | Parity in usage model |
+| Notification callback/event | `ReceivedNotification(name, count)` | Yes | n/a | n/a | Parity in concept |
+| Sender process id | No | Yes | n/a | n/a | PostgreSQL still ahead |
+| Payload string | No | Yes | n/a | n/a | PostgreSQL still ahead |
+
+### Verdict
+
+For real Xojo app workflows, Firebird now matches PostgreSQL's practical notification pattern well enough:
+
+- subscribe
+- post
+- poll
+- receive an event
+
+The remaining gap is not workflow shape. The remaining gap is PostgreSQL-specific metadata richness.
+
+## 3B. Blob Streaming and Large-Object Semantics
+
+| Capability | Firebird plugin | PostgreSQL | SQLite | Assessment |
+| --- | --- | --- | --- | --- |
+| Inline prepared text/blob helpers | Yes | Different model | Different model | Firebird advantage for straightforward prepared binding |
+| Streaming blob object | `FirebirdBlob` | large-object object | blob object | Practical parity in capability |
+| `CreateBlob` / `OpenBlob` style entry points | Yes | Different large-object lifecycle names | Yes | Good parity for Xojo ergonomics |
+| Exact PostgreSQL large-object lifecycle semantics | No | Yes | No | PostgreSQL still ahead |
+| Transaction-bound blob behavior | Yes | Yes | Engine-specific | Firebird is honest about native behavior |
+
+### Verdict
+
+Firebird no longer lacks streaming blob support. That gap is closed.
+
+What still differs is the lifecycle model:
+
+- Firebird uses transaction-bound blob locators and row/column reopening
+- PostgreSQL uses a separate large-object lifecycle
+
+That is now a semantics gap, not a missing-capability gap
 
 ## 4. Built-in Driver Features Firebird Does Not Yet Match
 
@@ -264,6 +316,19 @@ Xojo's MySQL docs explicitly warn that returned strings may not have a defined e
 
 From a practical text-handling point of view, the Firebird plugin is currently in a better place than the built-in MySQL driver.
 
+### E. Built-in-driver feel after Phases 25 and 26
+
+The biggest perception gap used to be that Firebird looked thinner in app-facing extras than PostgreSQL or SQLite.
+
+That gap is now materially smaller because the plugin ships:
+
+- practical event notifications
+- a real streaming blob object
+- buffered `RowSet` navigation
+- affected-row reporting
+
+That does not make it identical to PostgreSQL or SQLite, but it does move Firebird much closer to "first-class built-in driver" territory for day-to-day Xojo development.
+
 ## 6. Areas Where Firebird Is Still Behind
 
 ### A. Security / connection options
@@ -350,9 +415,9 @@ Ranking:
 
 Reason:
 
-- PostgreSQL still has richer notification payload semantics and large objects
+- PostgreSQL still has richer notification payload semantics and exact large-object lifecycle semantics
 - SQLite has rich local-engine APIs
-- Firebird now has strong admin APIs plus shipped event notifications, but still has fewer app-integration extras than PostgreSQL or SQLite
+- Firebird now has strong admin APIs plus shipped event notifications and blob streaming, but still has fewer app-integration extras than PostgreSQL or SQLite
 
 ## 8. Bottom-Line Assessment
 
@@ -366,6 +431,8 @@ The Firebird plugin is already on par for:
 - transactions
 - schema inspection
 - `AddRow`
+- practical event notifications
+- Firebird-native blob streaming
 - normal Xojo app development workflows
 
 ### Still lacking
@@ -393,6 +460,12 @@ If the goal is to make the Firebird plugin feel closer to a first-class built-in
 1. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
 2. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
 3. Revisit PostgreSQL-style large-object lifecycle semantics only if the shipped Firebird-native blob surface proves insufficient in real projects
+
+If the goal is production/deployment credibility first, the order changes slightly:
+
+1. certificate-path properties, if Firebird exposes a clean per-connection model
+2. editable `RowSet` behavior only if it delivers real app-code value
+3. large-object lifecycle semantics only if real projects need closer PostgreSQL mimicry
 
 Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
