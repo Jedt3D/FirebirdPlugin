@@ -47,8 +47,9 @@
 #define isc_encode_timestamp ptr_isc_encode_timestamp
 #endif
 
-// Modern Firebird C++ API not available on Windows (requires fb_c_api.h)
-#if __has_include(<firebird/fb_c_api.h>) && !defined(_WIN32) && !defined(_WIN64)
+// Modern Firebird C++ API - available on Firebird 6.0+
+// This branch (feature/firebird6-arm64) requires Firebird 6.0 for all platforms
+#if __has_include(<firebird/IdlFbInterfaces.h>)
 #define FB_HAS_MODERN_API 1
 #else
 #define FB_HAS_MODERN_API 0
@@ -62,13 +63,15 @@
 #include <limits>
 #include <sstream>
 
-extern "C" {
 #if FB_HAS_MODERN_API
-#include <firebird/fb_c_api.h>
+// Modern C++ API - don't use extern "C"
+#include <firebird/IdlFbInterfaces.h>
 #else
+// Legacy C API
+extern "C" {
 #include <ibase.h>
-#endif
 }
+#endif
 
 namespace {
 

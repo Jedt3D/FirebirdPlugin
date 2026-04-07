@@ -704,13 +704,8 @@ static void FireReceivedNotificationEvent(REALobject instance, const std::string
     if (eventName) REALUnlockString(eventName);
 }
 
-#if defined(_WIN64) && defined(__aarch64__)
-// ARM64 uses cdecl calling convention for compatibility
-static void FirebirdEventCallback(void *arg, ISC_USHORT length, const ISC_UCHAR *updated) {
-#else
-// Other platforms use ISC_EXPORT (which may be __stdcall or cdecl)
+// Firebird 6.0 on all platforms - use standard calling convention
 static void ISC_EXPORT FirebirdEventCallback(void *arg, ISC_USHORT length, const ISC_UCHAR *updated) {
-#endif
     auto *state = static_cast<FirebirdEventState *>(arg);
     if (!state) return;
 
