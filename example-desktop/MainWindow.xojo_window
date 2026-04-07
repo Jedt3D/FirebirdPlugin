@@ -676,6 +676,54 @@ End
 
 		  secureDb.Close
 
+		  Var sslModeDb As New FirebirdDatabase
+		  sslModeDb.Host = "localhost"
+		  sslModeDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  sslModeDb.UserName = "SYSDBA"
+		  sslModeDb.Password = "masterkey"
+		  sslModeDb.CharacterSet = "UTF8"
+		  sslModeDb.SSLMode = 3
+		  sslModeDb.AuthClientPlugins = "Srp256,Srp"
+
+		  Try
+		    If sslModeDb.Connect Then
+		      LogPass "SSLMode connect"
+		      
+		      If sslModeDb.SSLMode = 3 And sslModeDb.WireCrypt = "Required" Then
+		        LogPass "SSLMode readback"
+		      Else
+		        LogFail "SSLMode readback", "Expected SSLMode=3 and WireCrypt=Required"
+		      End If
+		    Else
+		      LogFail "SSLMode connect", sslModeDb.ErrorMessage
+		    End If
+		  Catch ex As DatabaseException
+		    LogFail "SSLMode connect", ex.Message
+		  Catch ex As RuntimeException
+		    LogFail "SSLMode connect", ex.Message
+		  End Try
+
+		  sslModeDb.Close
+
+		  Var unsupportedSslModeDb As New FirebirdDatabase
+		  unsupportedSslModeDb.Host = "localhost"
+		  unsupportedSslModeDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"
+		  unsupportedSslModeDb.UserName = "SYSDBA"
+		  unsupportedSslModeDb.Password = "masterkey"
+		  unsupportedSslModeDb.CharacterSet = "UTF8"
+		  unsupportedSslModeDb.SSLMode = 4
+
+		  Try
+		    If unsupportedSslModeDb.Connect Then
+		      LogFail "Unsupported SSLMode rejected", "Connection should have failed"
+		      unsupportedSslModeDb.Close
+		    Else
+		      LogPass "Unsupported SSLMode rejected"
+		    End If
+		  Catch ex As DatabaseException
+		    LogPass "Unsupported SSLMode rejected"
+		  End Try
+
 		  Var invalidWireDb As New FirebirdDatabase
 		  invalidWireDb.Host = "localhost"
 		  invalidWireDb.DatabaseName = "/Users/worajedt/Xojo Projects/FirebirdPlugin/music.fdb"

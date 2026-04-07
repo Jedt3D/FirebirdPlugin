@@ -95,6 +95,7 @@ End Sub
 // Role           String    ""        SQL role name
 // WireCrypt      String    ""        Firebird wire encryption: Disabled, Enabled, Required
 // AuthClientPlugins String ""        Firebird auth plugin list, for example "Srp256,Srp"
+// SSLMode        Integer   -1        Alias: 0 Disable, 1 Allow, 2 Prefer, 3 Require
 // Dialect        Integer   3         SQL dialect (1 or 3; always use 3)
 
 
@@ -211,6 +212,7 @@ Sub FirebirdOnlySurface(db As FirebirdDatabase)
   secureDb.UserName = db.UserName
   secureDb.Password = db.Password
   secureDb.CharacterSet = db.CharacterSet
+  secureDb.SSLMode = 3
   secureDb.WireCrypt = "Required"
   secureDb.AuthClientPlugins = "Srp256,Srp"
   Var secureConnectOk As Boolean = secureDb.Connect

@@ -66,6 +66,10 @@ static RBBoolean    fbCursorIsEOF(dbCursor *);
 static void         fbClassConstructor(REALobject instance);
 static void         fbClassDestructor(REALobject instance);
 static RBBoolean    fbClassConnect(REALobject instance);
+static REALstring   fbClassWireCryptGet(REALobject instance, long param);
+static void         fbClassWireCryptSet(REALobject instance, long param, REALstring value);
+static RBInteger    fbClassSSLModeGet(REALobject instance, long param);
+static void         fbClassSSLModeSet(REALobject instance, long param, RBInteger value);
 static REALstring   fbClassServerVersion(REALobject instance);
 static RBInteger    fbClassPageSize(REALobject instance);
 static RBInteger    fbClassDatabaseSQLDialect(REALobject instance);
@@ -193,10 +197,10 @@ static REALproperty sFirebirdClassProperties[] = {
       FieldOffset(FirebirdClassData, characterSet) },
     { "", "Role", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, role) },
-    { "", "WireCrypt", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
-      FieldOffset(FirebirdClassData, wireCrypt) },
+    { "", "WireCrypt", "String", REALconsoleSafe, (REALproc)fbClassWireCryptGet, (REALproc)fbClassWireCryptSet, 0 },
     { "", "AuthClientPlugins", "String", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, authClientPlugins) },
+    { "", "SSLMode", "Integer", REALconsoleSafe, (REALproc)fbClassSSLModeGet, (REALproc)fbClassSSLModeSet, 0 },
     { "", "Dialect", "Integer", REALconsoleSafe, REALstandardGetter, REALstandardSetter,
       FieldOffset(FirebirdClassData, dialect) },
     { "", "AffectedRowCount", "Int64", REALconsoleSafe, (REALproc)fbClassAffectedRowCount, nullptr, 0 },
@@ -328,6 +332,61 @@ static std::string RealToStd(REALstring rs) {
 
 static REALstring StdToReal(const std::string &s) {
     return REALBuildStringWithEncoding(s.c_str(), (int)s.size(), kREALTextEncodingUTF8);
+}
+
+static void SetRealStringField(REALstring &field, const std::string &value) {
+    if (field) REALUnlockString(field);
+    field = StdToReal(value);
+}
+
+static std::string NormalizeLowerToken(const std::string &text) {
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (char ch : text) {
+        normalized.push_back((char)std::tolower((unsigned char)ch));
+    }
+    return normalized;
+}
+
+static int32_t WireCryptToSSLModeValue(const std::string &wireCrypt) {
+    const std::string normalized = NormalizeLowerToken(wireCrypt);
+    if (normalized.empty()) return -1;
+    if (normalized == "disabled") return 0;
+    if (normalized == "enabled") return 2;
+    if (normalized == "required") return 3;
+    return -1;
+}
+
+static bool SSLModeToWireCryptValue(RBInteger sslMode, std::string &wireCrypt) {
+    switch ((int32_t)sslMode) {
+        case -1:
+            wireCrypt.clear();
+            return true;
+        case 0:
+            wireCrypt = "Disabled";
+            return true;
+        case 1:
+        case 2:
+            wireCrypt = "Enabled";
+            return true;
+        case 3:
+            wireCrypt = "Required";
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool ResolveEffectiveWireCrypt(const FirebirdClassData *data, std::string &wireCrypt) {
+    if (!data) {
+        wireCrypt.clear();
+        return true;
+    }
+
+    wireCrypt = RealToStd(data->wireCrypt);
+    if (!wireCrypt.empty()) return true;
+    if (data->sslMode < 0) return true;
+    return SSLModeToWireCryptValue(data->sslMode, wireCrypt);
 }
 
 static FirebirdDbData *GetFirebirdDbData(REALobject instance) {
@@ -1532,6 +1591,7 @@ static void fbClassConstructor(REALobject instance) {
     data->role = nullptr;
     data->wireCrypt = nullptr;
     data->authClientPlugins = nullptr;
+    data->sslMode = -1;
     data->port = 3050;
     data->dialect = 3;
 }
@@ -1548,6 +1608,43 @@ static void fbClassDestructor(REALobject instance) {
     if (data->authClientPlugins) REALUnlockString(data->authClientPlugins);
 }
 
+static REALstring fbClassWireCryptGet(REALobject instance, long) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    return StdToReal(data ? RealToStd(data->wireCrypt) : "");
+}
+
+static void fbClassWireCryptSet(REALobject instance, long, REALstring value) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    if (!data) return;
+
+    const std::string wireCrypt = RealToStd(value);
+    SetRealStringField(data->wireCrypt, wireCrypt);
+    data->sslMode = WireCryptToSSLModeValue(wireCrypt);
+}
+
+static RBInteger fbClassSSLModeGet(REALobject instance, long) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    if (!data) return -1;
+
+    if (data->sslMode >= 0) return data->sslMode;
+    return WireCryptToSSLModeValue(RealToStd(data->wireCrypt));
+}
+
+static void fbClassSSLModeSet(REALobject instance, long, RBInteger value) {
+    ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
+    if (!data) return;
+
+    std::string wireCrypt;
+    if (!SSLModeToWireCryptValue(value, wireCrypt)) {
+        data->sslMode = (int32_t)value;
+        SetRealStringField(data->wireCrypt, "");
+        return;
+    }
+
+    data->sslMode = (int32_t)value;
+    SetRealStringField(data->wireCrypt, wireCrypt);
+}
+
 static RBBoolean fbClassConnect(REALobject instance) {
     ClassData(sFirebirdDatabaseClass, instance, FirebirdClassData, data);
 
@@ -1557,8 +1654,10 @@ static RBBoolean fbClassConnect(REALobject instance) {
     std::string pass = RealToStd(data->password);
     std::string charset = RealToStd(data->characterSet);
     std::string role = RealToStd(data->role);
-    std::string wireCrypt = RealToStd(data->wireCrypt);
+    std::string wireCrypt;
     std::string authClientPlugins = RealToStd(data->authClientPlugins);
+
+    if (!ResolveEffectiveWireCrypt(data, wireCrypt)) return false;
 
     if (charset.empty()) charset = "UTF8";
     if (user.empty()) user = "SYSDBA";
@@ -1761,6 +1860,9 @@ static RBBoolean fbClassShutdownDenyNewAttachments(REALobject instance, long tim
     auto *fbd = EnsureFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
 
+    std::string wireCrypt;
+    if (!ResolveEffectiveWireCrypt(data, wireCrypt)) return false;
+
     FBDatabase controlDb;
     controlDb.configureServiceContext(RealToStd(data->databaseName),
                                       RealToStd(data->userName),
@@ -1768,7 +1870,7 @@ static RBBoolean fbClassShutdownDenyNewAttachments(REALobject instance, long tim
                                       RealToStd(data->role),
                                       RealToStd(data->host),
                                       data->port,
-                                      RealToStd(data->wireCrypt),
+                                      wireCrypt,
                                       RealToStd(data->authClientPlugins));
 
     RBBoolean ok = controlDb.shutdownDenyNewAttachments(timeoutSeconds);
@@ -1781,6 +1883,9 @@ static RBBoolean fbClassBringDatabaseOnline(REALobject instance) {
     auto *fbd = EnsureFirebirdDbData(instance);
     if (!fbd || !fbd->db) return false;
 
+    std::string wireCrypt;
+    if (!ResolveEffectiveWireCrypt(data, wireCrypt)) return false;
+
     FBDatabase controlDb;
     controlDb.configureServiceContext(RealToStd(data->databaseName),
                                       RealToStd(data->userName),
@@ -1788,7 +1893,7 @@ static RBBoolean fbClassBringDatabaseOnline(REALobject instance) {
                                       RealToStd(data->role),
                                       RealToStd(data->host),
                                       data->port,
-                                      RealToStd(data->wireCrypt),
+                                      wireCrypt,
                                       RealToStd(data->authClientPlugins));
 
     RBBoolean ok = controlDb.bringDatabaseOnline();

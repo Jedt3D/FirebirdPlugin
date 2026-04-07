@@ -10,7 +10,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
 - `SelectSQL` / `ExecuteSQL` returning `RowSet`
 - `Database.AddRow(...)` support, including generated-key return for common identity-primary-key workflows
 - `AffectedRowCount` property for the last non-query execution path
-- Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`
+- Firebird-native connection security controls: `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Buffered `RowSet` read navigation: `RowCount`, `MoveToPreviousRow`, `MoveToFirstRow`, `MoveToLastRow`
 - `Prepare` returning `PreparedStatement` with typed `Bind` methods
 - Database info helpers: `ServerVersion`, `PageSize`, `DatabaseSQLDialect`, `ODSVersion`, `IsReadOnly`
@@ -23,7 +23,7 @@ Built on the **Firebird legacy C API** (`ibase.h` / `libfbclient`) and the **Xoj
   `INT128`, `DECFLOAT(16/34)`, `TIME WITH TIME ZONE`, `TIMESTAMP WITH TIME ZONE`
 - Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
 - Schema introspection: `TableSchema`, `FieldSchema`, `IndexSchema`
-- Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`, `WireCrypt`, `AuthClientPlugins`
+- Firebird-specific properties: `Host`, `Port`, `DatabaseName`, `CharacterSet`, `Role`, `Dialect`, `WireCrypt`, `AuthClientPlugins`, `SSLMode`
 - Full type mapping: INTEGER, BIGINT, FLOAT, DOUBLE, NUMERIC/DECIMAL, VARCHAR, CHAR, BLOB (text & binary), DATE, TIME, TIMESTAMP, BOOLEAN, plus Firebird 4/5/6 modern types via `StringValue`
 - Supports **remote** (client/server) and **embedded** (direct file) connections
 - Cross-platform: **macOS** (arm64, x86_64), **Windows** (x64, arm64), **Linux** (x64)
@@ -39,6 +39,7 @@ db.DatabaseName = "/var/firebird/data/myapp.fdb"
 db.UserName = "SYSDBA"
 db.Password = "masterkey"
 db.CharacterSet = "UTF8"
+db.SSLMode = 3                   // optional alias: 0 Disable, 1 Allow, 2 Prefer, 3 Require
 db.WireCrypt = "Required"        // optional: Disabled, Enabled, Required
 db.AuthClientPlugins = "Srp256,Srp"
 
@@ -142,10 +143,11 @@ Notes:
 
 ## Connection Security Options
 
-`FirebirdDatabase` exposes two Firebird-native connection-security properties:
+`FirebirdDatabase` exposes three connection-security properties:
 
 - `WireCrypt As String`
 - `AuthClientPlugins As String`
+- `SSLMode As Integer`
 
 ```vb
 Var db As New FirebirdDatabase
@@ -154,6 +156,7 @@ db.DatabaseName = "/var/firebird/data/myapp.fdb"
 db.UserName = "SYSDBA"
 db.Password = "masterkey"
 db.CharacterSet = "UTF8"
+db.SSLMode = 3
 db.WireCrypt = "Required"
 db.AuthClientPlugins = "Srp256,Srp"
 
@@ -166,10 +169,25 @@ db.Connect
 - `Enabled`
 - `Required`
 
+`SSLMode` accepts:
+
+- `0` = disable
+- `1` = allow
+- `2` = prefer
+- `3` = require
+
+Unsupported values:
+
+- `4` = verify-ca
+- `5` = verify-full
+
 Notes:
 
 - `WireCrypt` maps to Firebird's per-connection config override
 - `AuthClientPlugins` maps to Firebird's auth-plugin list clumplet
+- `SSLMode` is a convenience alias over `WireCrypt`
+- `SSLMode = 1` and `SSLMode = 2` both map to `WireCrypt = "Enabled"`
+- `SSLMode = 4` and `SSLMode = 5` are rejected because this plugin does not expose certificate-validation semantics
 - these properties apply to both ordinary remote attachments and service-manager control operations
 - this is intentionally Firebird-native, not a fake certificate-path API
 

@@ -28,6 +28,7 @@ Sub ConnectToRemoteServer()
   db.Password = "masterkey"
   db.CharacterSet = "UTF8"          // default, can omit
   db.Dialect = 3                    // default, can omit
+  db.SSLMode = 3                    // optional alias: 0 Disable, 1 Allow, 2 Prefer, 3 Require
   db.WireCrypt = "Required"         // optional: Disabled, Enabled, Required
   db.AuthClientPlugins = "Srp256,Srp"
 
@@ -57,6 +58,7 @@ Sub ConnectWithWireCrypt()
   db.UserName = "SYSDBA"
   db.Password = "masterkey"
   db.CharacterSet = "UTF8"
+  db.SSLMode = 3
   db.WireCrypt = "Required"
   db.AuthClientPlugins = "Srp256,Srp"
 
