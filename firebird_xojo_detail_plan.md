@@ -268,6 +268,7 @@ This table tracks implementation progress against the plan through the currently
 | 20 | Firebird-native connection-security properties slice | Complete | `166 passed, 0 failed` | `feature/phase-20` | `588c217` | `phase_20_article.md` |
 | 21 | buffered `RowSet` read-navigation slice | Complete | `172 passed, 0 failed` | `feature/phase-21` | `a5367c1` | `phase_21_article.md` |
 | 22 | limited `SSLMode` alias over `WireCrypt` | Complete | `175 passed, 0 failed` | `feature/phase-22` | `9179762` | `phase_22_article.md` |
+| 23 | PostgreSQL large-object parity investigation | Complete | `n/a (design slice)` | `feature/phase-23` | `64f1126` | `phase_23_article.md` |
 
 ## Current Xojo Feature Snapshot
 
@@ -574,14 +575,15 @@ Status: completed on April 6, 2026.
 | Array API | Firebird SDK only | Missing | Low |
 | move from legacy API to interface-based API | Python firebird-driver, Firebird 3+ docs | Missing | Long-term decision |
 
-## Progress Summary Through Phase 22
+## Progress Summary Through Phase 23
 
-Planned through Phase 22 and now complete:
+Planned through Phase 23 and now complete:
 
 - affected-row reporting for non-query execution paths
 - SSL/TLS feasibility and API design spike
 - Firebird-native `WireCrypt` / `AuthClientPlugins` connection properties
 - limited `SSLMode` alias over `WireCrypt`
+- PostgreSQL large-object parity investigation and design decision
 - buffered `RowSet` read navigation with real `RowCount`
 - database info helpers
 - Firebird 4/5/6 modern type support
@@ -606,10 +608,10 @@ Planned through Phase 22 and now complete:
 - delete user
 - service output capture
 
-Still outside completed scope after Phase 22:
+Still outside completed scope after Phase 23:
 
 - PostgreSQL-style certificate-path properties
-- dedicated large-object / streaming BLOB surface
+- Firebird-native streaming BLOB surface
 - broader user-management workflows
 - broader maintenance/repair services
 - event API
@@ -626,8 +628,8 @@ Still outside completed scope after Phase 22:
 
 ### Do next
 
-- evaluate a dedicated Firebird large-object / streaming BLOB API
 - decide whether Firebird event APIs are worth exposing in the public Xojo surface
+- revisit a Firebird-native streaming BLOB API only if blob-id ergonomics can be exposed cleanly
 - revisit certificate-path properties only if Firebird exposes a clean per-connection model for them
 - revisit editable `RowSet` behavior only if it creates a real built-in-driver parity gain
 

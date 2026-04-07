@@ -39,7 +39,8 @@ It is also stronger than Xojo's built-in drivers in one important area: Firebird
 The main areas where it still trails the built-ins are:
 
 - no PostgreSQL-style certificate-path SSL/TLS surface
-- no PostgreSQL-style notifications or large-object class
+- no PostgreSQL-style notifications
+- no clean Firebird-native streaming BLOB class yet
 - no SQLite-style local-engine utilities such as `BackUp`, `CreateBlob`, `OpenBlob`, encryption, attached databases, or WAL controls
 - a thinner `RowSet` implementation than SQLite
 
@@ -275,7 +276,7 @@ Compared with MySQL and PostgreSQL, Firebird currently lacks:
 Compared with PostgreSQL and SQLite, Firebird currently lacks:
 
 - notification/event APIs
-- dedicated large-object classes
+- a clean Firebird-native streaming BLOB class
 - SQLite-style BLOB streaming objects
 - SQLite-style encryption and attached-database management
 
@@ -372,7 +373,7 @@ The Firebird plugin is still behind the built-ins in:
 
 - PostgreSQL-style certificate controls
 - PostgreSQL notifications
-- PostgreSQL large objects
+- PostgreSQL-style large-object ergonomics
 - SQLite backup/blob/encryption/attachment/WAL tooling
 - editable `RowSet` behavior
 
@@ -389,8 +390,8 @@ The Firebird plugin is stronger in:
 
 If the goal is to make the Firebird plugin feel closer to a first-class built-in driver, the highest-value next steps are:
 
-1. Consider a dedicated Firebird BLOB object if streaming use cases appear often
-2. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+1. Add event/notification-style support only if Firebird's event API is worth exposing in Xojo
+2. Revisit a Firebird-native streaming BLOB handle only if stable blob-id ergonomics can be exposed cleanly
 3. Revisit editable `RowSet` behavior only if it produces a real Xojo-visible gain
 4. Add certificate-path properties only if Firebird exposes a clean per-connection model for them
 
@@ -398,6 +399,7 @@ Phase 18 closes the earlier `AffectedRowCount` gap.
 Phase 20 closes the first connection-security parity slice through `WireCrypt` and `AuthClientPlugins`.
 Phase 21 closes the forward-only `RowSet` navigation gap through buffered read navigation and real `RowCount`.
 Phase 22 closes the narrow PostgreSQL-style `SSLMode` alias gap through an honest wrapper over `WireCrypt`.
+Phase 23 closes the PostgreSQL large-object parity investigation with a no-go decision on direct API mimicry.
 
 If the goal is to maximize Firebird's distinctive value instead, the better path is:
 
